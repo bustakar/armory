@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+:root {
+  --background: #1a1a2e;
+  --foreground: #eaeaea;
+  --accent: #ffd700;
+  --accent-dim: #b8860b;
+  --health: #ff4757;
+  --health-bg: #4a1a1d;
+  --xp: #2ed573;
+  --xp-bg: #1a4a2e;
+  --mana: #3498db;
+  --mana-bg: #1a2e4a;
+  --border: #4a4a6a;
+  --card: #16213e;
+  --card-hover: #1f2f5a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-health: var(--health);
+  --color-health-bg: var(--health-bg);
+  --color-xp: var(--xp);
+  --color-xp-bg: var(--xp-bg);
+  --color-mana: var(--mana);
+  --color-mana-bg: var(--mana-bg);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --font-pixel: "Press Start 2P", monospace;
+}
+
+* {
+  image-rendering: pixelated;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Press Start 2P", monospace;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+/* Pixel border utility */
+.pixel-border {
+  border: 4px solid var(--border);
+  box-shadow:
+    inset -4px -4px 0 0 #2a2a4a,
+    inset 4px 4px 0 0 #6a6a8a;
+}
+
+/* 8-bit button style */
+.pixel-btn {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  padding: 12px 24px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  cursor: pointer;
+  box-shadow:
+    4px 4px 0 0 var(--accent-dim),
+    inset -2px -2px 0 0 var(--accent-dim),
+    inset 2px 2px 0 0 #fff5;
+  transition: all 0.1s;
+}
+
+.pixel-btn:hover {
+  transform: translate(2px, 2px);
+  box-shadow:
+    2px 2px 0 0 var(--accent-dim),
+    inset -2px -2px 0 0 var(--accent-dim),
+    inset 2px 2px 0 0 #fff5;
+}
+
+.pixel-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow:
+    0 0 0 0 var(--accent-dim),
+    inset -2px -2px 0 0 var(--accent-dim),
+    inset 2px 2px 0 0 #fff5;
+}
+
+/* HP/XP bar styling */
+.stat-bar {
+  height: 20px;
+  background: var(--card);
+  border: 3px solid var(--border);
+  box-shadow: inset 0 0 0 2px #0005;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  box-shadow: inset 0 -4px 0 0 #0003, inset 0 4px 0 0 #fff2;
+}
+
+.stat-bar-hp .stat-bar-fill {
+  background: linear-gradient(180deg, var(--health) 0%, #c0392b 100%);
+}
+
+.stat-bar-xp .stat-bar-fill {
+  background: linear-gradient(180deg, var(--xp) 0%, #27ae60 100%);
+}
+
+/* Card styling */
+.pixel-card {
+  background: var(--card);
+  border: 4px solid var(--border);
+  box-shadow:
+    8px 8px 0 0 #0004,
+    inset -4px -4px 0 0 #1a1a3e,
+    inset 4px 4px 0 0 #2a2a5e;
+}
+
+/* Input styling */
+.pixel-input {
+  background: #0f0f1f;
+  border: 3px solid var(--border);
+  color: var(--foreground);
+  padding: 12px 16px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  box-shadow: inset 2px 2px 0 0 #0005;
+}
+
+.pixel-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 2px 2px 0 0 #0005, 0 0 0 2px var(--accent);
+}
+
+.pixel-input::placeholder {
+  color: #666;
+}
+
+/* Blinking cursor animation */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.blink {
+  animation: blink 1s infinite;
+}
+
+/* Scanlines effect (optional) */
+.scanlines::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    #0001 2px,
+    #0001 4px
+  );
+  pointer-events: none;
+}

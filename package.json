@@ -1,0 +1,29 @@
+{
+  "name": "armory",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/bun": "latest",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vite-tsconfig-paths": "^6.0.4"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "^1.151.6",
+    "@tanstack/react-start": "^1.153.0",
+    "convex": "^1.31.5",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "vinxi": "^0.5.10"
+  }
+}
