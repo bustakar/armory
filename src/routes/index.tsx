@@ -1,44 +1,28 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/")({
   component: Home,
 });
 
 function Home() {
-  const [input, setInput] = useState("");
-  const [error, setError] = useState("");
   const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
-    let owner = "";
-    let repo = "";
-    const trimmed = input.trim();
-
-    if (trimmed.includes("github.com")) {
-      const match = trimmed.match(/github\.com\/([^/]+)\/([^/]+)/);
-      if (match) {
-        owner = match[1]!;
-        repo = match[2]!.replace(/\.git$/, "");
-      }
-    } else if (trimmed.includes("/")) {
-      const parts = trimmed.split("/");
-      if (parts.length === 2) {
-        owner = parts[0]!;
-        repo = parts[1]!;
+  useEffect(() => {
+    const token = localStorage.getItem("github_token");
+    const userJson = localStorage.getItem("github_user");
+    if (token && userJson) {
+      setIsLoggedIn(true);
+      try {
+        const user = JSON.parse(userJson);
+        setUsername(user.login);
+      } catch {
+        // ignore
       }
     }
-
-    if (!owner || !repo) {
-      setError("Invalid format. Use owner/repo or GitHub URL");
-      return;
-    }
-
-    navigate({ to: "/character/$owner/$repo", params: { owner, repo } });
-  };
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -47,69 +31,83 @@ function Home() {
         <div className="mb-8">
           <h1 className="text-4xl text-accent mb-4 tracking-wider">ARMORY</h1>
           <p className="text-sm text-foreground/70">
-            Character Verification System
+            Turn your GitHub activity into an RPG
           </p>
         </div>
 
-        {/* Search Card */}
+        {/* Main Card */}
         <div className="pixel-card p-8 mb-8">
-          <h2 className="text-lg mb-2">VIEW CHARACTER</h2>
-          <p className="text-xs text-foreground/60 mb-6">
-            Enter a GitHub grimoire repository
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="owner/grimoire"
-              className="pixel-input w-full"
-            />
-            {error && (
-              <p className="text-health text-xs">{error}</p>
-            )}
-            <button type="submit" className="pixel-btn w-full">
-              INSPECT
-            </button>
-          </form>
+          {isLoggedIn ? (
+            <>
+              <h2 className="text-lg mb-2">WELCOME BACK</h2>
+              <p className="text-xs text-foreground/60 mb-6">
+                Logged in as <span className="text-accent">{username}</span>
+              </p>
+              <Link to="/dashboard" className="pixel-btn inline-block w-full">
+                GO TO DASHBOARD
+              </Link>
+            </>
+          ) : (
+            <>
+              <h2 className="text-lg mb-2">CONNECT GITHUB</h2>
+              <p className="text-xs text-foreground/60 mb-6">
+                Track commits, issues, and PRs. Earn XP. Don't die.
+              </p>
+              <Link to="/auth/login" className="pixel-btn inline-block w-full">
+                LOGIN WITH GITHUB
+              </Link>
+            </>
+          )}
         </div>
 
-        {/* Features */}
-        <div className="grid md:grid-cols-3 gap-4 text-left">
+        {/* How it works */}
+        <div className="grid md:grid-cols-3 gap-4 text-left mb-8">
           <div className="pixel-card p-4">
-            <h3 className="text-accent text-xs mb-2">GIT VERIFIED</h3>
+            <h3 className="text-accent text-xs mb-2">1. CONNECT</h3>
             <p className="text-[10px] text-foreground/60 leading-relaxed">
-              All stats calculated from commit history
+              Link your GitHub account and select repos to track
             </p>
           </div>
           <div className="pixel-card p-4">
-            <h3 className="text-accent text-xs mb-2">PERMADEATH</h3>
+            <h3 className="text-accent text-xs mb-2">2. CODE</h3>
             <p className="text-[10px] text-foreground/60 leading-relaxed">
-              HP = 0 means game over. View the graveyard.
+              Commits, issues, PRs = XP. Milestones = boss fights.
             </p>
           </div>
           <div className="pixel-card p-4">
-            <h3 className="text-accent text-xs mb-2">ANTI-CHEAT</h3>
+            <h3 className="text-accent text-xs mb-2">3. SURVIVE</h3>
             <p className="text-[10px] text-foreground/60 leading-relaxed">
-              History rewrites are detected and flagged
+              No activity = HP loss. HP = 0 = permadeath.
             </p>
+          </div>
+        </div>
+
+        {/* XP Table */}
+        <div className="pixel-card p-6 text-left mb-8">
+          <h3 className="text-accent text-xs mb-4">XP VALUES</h3>
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            <div className="flex justify-between">
+              <span className="text-foreground/60">Commit</span>
+              <span className="text-accent">+10 XP</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-foreground/60">Issue Closed</span>
+              <span className="text-accent">+25 XP</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-foreground/60">PR Merged</span>
+              <span className="text-accent">+50 XP</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-foreground/60">Milestone Done</span>
+              <span className="text-accent">+200 XP</span>
+            </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="mt-12 text-[10px] text-foreground/40">
-          <p>
-            Character is a git-based life RPG.{" "}
-            <a
-              href="https://github.com/karelbusta/grimoire"
-              className="text-accent hover:underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Get Started →
-            </a>
-          </p>
+        <div className="text-[10px] text-foreground/40">
+          <p>Your GitHub activity is the game. No fake commits. No cheating.</p>
         </div>
       </main>
     </div>
