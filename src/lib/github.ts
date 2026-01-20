@@ -1,91 +1,176 @@
-import { GitCommit } from "./types";
+import type {
+  GitHubUser,
+  GitHubRepo,
+  GitHubCommit,
+  GitHubIssue,
+  GitHubPullRequest,
+  GitHubMilestone,
+} from "./types";
 
-interface GitHubCommit {
-  sha: string;
-  commit: {
-    message: string;
-    author: {
-      name: string;
-      date: string;
-    };
-  };
-}
+const GITHUB_API = "https://api.github.com";
 
-export async function fetchGitHubCommits(
-  owner: string,
-  repo: string,
-  perPage = 100,
-  page = 1
-): Promise<GitCommit[]> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/commits?per_page=${perPage}&page=${page}`;
+// GitHub API client
+export class GitHubClient {
+  private token: string;
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      // Add auth header if GITHUB_TOKEN is available
-      ...(process.env.GITHUB_TOKEN
-        ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-        : {}),
-    },
-    next: { revalidate: 60 }, // Cache for 60 seconds
-  });
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Repository ${owner}/${repo} not found`);
-    }
-    if (response.status === 403) {
-      throw new Error("GitHub API rate limit exceeded. Try again later.");
-    }
-    throw new Error(`GitHub API error: ${response.status}`);
+  constructor(token: string) {
+    this.token = token;
   }
 
-  const commits: GitHubCommit[] = await response.json();
+  private async fetch<T>(endpoint: string): Promise<T> {
+    const response = await fetch(`${GITHUB_API}${endpoint}`, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
 
-  return commits.map((c) => ({
-    hash: c.sha.substring(0, 7),
-    message: c.commit.message,
-    date: c.commit.author.date,
-    author: c.commit.author.name,
-  }));
-}
-
-export async function fetchAllCommits(owner: string, repo: string): Promise<GitCommit[]> {
-  const allCommits: GitCommit[] = [];
-  let page = 1;
-  const perPage = 100;
-
-  while (true) {
-    const commits = await fetchGitHubCommits(owner, repo, perPage, page);
-    allCommits.push(...commits);
-
-    if (commits.length < perPage) {
-      break;
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Not found");
+      }
+      if (response.status === 403) {
+        throw new Error("Rate limit exceeded or insufficient permissions");
+      }
+      throw new Error(`GitHub API error: ${response.status}`);
     }
 
-    page++;
-
-    // Safety limit to prevent infinite loops
-    if (page > 100) {
-      break;
-    }
+    return response.json();
   }
 
-  return allCommits;
+  // Get authenticated user
+  async getUser(): Promise<GitHubUser> {
+    return this.fetch<GitHubUser>("/user");
+  }
+
+  // Get user's repos
+  async getRepos(): Promise<GitHubRepo[]> {
+    return this.fetch<GitHubRepo[]>("/user/repos?per_page=100&sort=pushed");
+  }
+
+  // Get commits for a repo (since a date)
+  async getCommits(owner: string, repo: string, since?: string): Promise<GitHubCommit[]> {
+    const params = new URLSearchParams({ per_page: "100" });
+    if (since) {
+      params.set("since", since);
+    }
+    return this.fetch<GitHubCommit[]>(`/repos/${owner}/${repo}/commits?${params}`);
+  }
+
+  // Get closed issues for a repo (since a date)
+  async getClosedIssues(owner: string, repo: string, since?: string): Promise<GitHubIssue[]> {
+    const params = new URLSearchParams({
+      state: "closed",
+      per_page: "100",
+    });
+    if (since) {
+      params.set("since", since);
+    }
+    return this.fetch<GitHubIssue[]>(`/repos/${owner}/${repo}/issues?${params}`);
+  }
+
+  // Get merged PRs for a repo
+  async getMergedPRs(owner: string, repo: string): Promise<GitHubPullRequest[]> {
+    const params = new URLSearchParams({
+      state: "closed",
+      per_page: "100",
+    });
+    const prs = await this.fetch<GitHubPullRequest[]>(`/repos/${owner}/${repo}/pulls?${params}`);
+    return prs.filter((pr) => pr.merged_at !== null);
+  }
+
+  // Get milestones for a repo
+  async getMilestones(owner: string, repo: string): Promise<GitHubMilestone[]> {
+    const params = new URLSearchParams({
+      state: "all",
+      per_page: "100",
+    });
+    return this.fetch<GitHubMilestone[]>(`/repos/${owner}/${repo}/milestones?${params}`);
+  }
+
+  // Get repo details
+  async getRepo(owner: string, repo: string): Promise<GitHubRepo> {
+    return this.fetch<GitHubRepo>(`/repos/${owner}/${repo}`);
+  }
+
+  // Get open issues count
+  async getOpenIssuesCount(owner: string, repo: string): Promise<number> {
+    const repo_data = await this.getRepo(owner, repo);
+    // open_issues_count includes PRs, but it's a good approximation
+    return (repo_data as GitHubRepo & { open_issues_count?: number }).open_issues_count || 0;
+  }
 }
 
-export async function checkRepoExists(owner: string, repo: string): Promise<boolean> {
-  const url = `https://api.github.com/repos/${owner}/${repo}`;
+// OAuth helpers
+export const GITHUB_OAUTH_URL = "https://github.com/login/oauth/authorize";
+export const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
-  const response = await fetch(url, {
+export function getGitHubAuthUrl(clientId: string, redirectUri: string, state: string): string {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope: "read:user repo",
+    state,
+  });
+  return `${GITHUB_OAUTH_URL}?${params}`;
+}
+
+export async function exchangeCodeForToken(
+  clientId: string,
+  clientSecret: string,
+  code: string
+): Promise<string> {
+  const response = await fetch(GITHUB_TOKEN_URL, {
+    method: "POST",
     headers: {
-      Accept: "application/vnd.github.v3+json",
-      ...(process.env.GITHUB_TOKEN
-        ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-        : {}),
+      Accept: "application/json",
+      "Content-Type": "application/json",
     },
-    next: { revalidate: 300 }, // Cache for 5 minutes
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+    }),
   });
 
-  return response.ok;
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(`GitHub OAuth error: ${data.error_description || data.error}`);
+  }
+
+  return data.access_token;
+}
+
+// Helper to check if user has committed today
+export function hasCommittedToday(commits: GitHubCommit[]): boolean {
+  const today = new Date().toISOString().split("T")[0];
+  return commits.some((c) => c.commit.author.date.startsWith(today));
+}
+
+// Group commits by date
+export function groupCommitsByDate(commits: GitHubCommit[]): Map<string, GitHubCommit[]> {
+  const grouped = new Map<string, GitHubCommit[]>();
+  for (const commit of commits) {
+    const date = commit.commit.author.date.split("T")[0];
+    if (!grouped.has(date)) {
+      grouped.set(date, []);
+    }
+    grouped.get(date)!.push(commit);
+  }
+  return grouped;
+}
+
+// Group issues by closed date
+export function groupIssuesByClosedDate(issues: GitHubIssue[]): Map<string, GitHubIssue[]> {
+  const grouped = new Map<string, GitHubIssue[]>();
+  for (const issue of issues) {
+    if (issue.closed_at) {
+      const date = issue.closed_at.split("T")[0];
+      if (!grouped.has(date)) {
+        grouped.set(date, []);
+      }
+      grouped.get(date)!.push(issue);
+    }
+  }
+  return grouped;
 }

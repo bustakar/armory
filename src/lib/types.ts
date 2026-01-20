@@ -1,3 +1,64 @@
+// GitHub API types
+export interface GitHubUser {
+  id: number;
+  login: string;
+  avatar_url: string;
+  name: string | null;
+}
+
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  owner: {
+    login: string;
+  };
+  description: string | null;
+  html_url: string;
+  pushed_at: string;
+  language: string | null;
+}
+
+export interface GitHubCommit {
+  sha: string;
+  commit: {
+    message: string;
+    author: {
+      name: string;
+      date: string;
+    };
+  };
+}
+
+export interface GitHubIssue {
+  id: number;
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  closed_at: string | null;
+  labels: { name: string }[];
+  milestone: { title: string } | null;
+}
+
+export interface GitHubPullRequest {
+  id: number;
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  merged_at: string | null;
+}
+
+export interface GitHubMilestone {
+  id: number;
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  closed_at: string | null;
+  open_issues: number;
+  closed_issues: number;
+}
+
+// Game types
 export interface Character {
   name: string;
   level: number;
@@ -5,92 +66,65 @@ export interface Character {
   xpToNextLevel: number;
   hp: number;
   maxHp: number;
-  createdAt: string;
   isAlive: boolean;
-  deathCause?: string;
+  // Stats
+  totalCommits: number;
+  totalIssuesClosed: number;
+  totalPrsMerged: number;
+  totalMilestonesCompleted: number;
+  currentStreak: number;
+  longestStreak: number;
+  // Timestamps
+  createdAt: string;
+  lastActivityAt?: string;
   deathDate?: string;
+  deathCause?: string;
 }
 
 export interface Zone {
-  name: string;
-  createdAt: string;
-  questsCompleted: number;
-  questsActive: number;
-  questsBacklog: number;
+  owner: string;
+  repo: string;
+  fullName: string;
+  description: string | null;
+  language: string | null;
+  activatedAt: string;
+  // Stats
+  commits: number;
+  issuesClosed: number;
+  openIssues: number;
+  milestonesCompleted: number;
+  openMilestones: number;
+  lastCommitAt?: string;
 }
 
-export interface Quest {
-  name: string;
-  zone: string;
-  xpValue: number;
-  status: "backlog" | "active" | "completed" | "abandoned" | "missed";
-  createdAt: string;
-  activatedAt?: string;
-  completedAt?: string;
-}
-
-export interface DailyConfig {
-  name: string;
-  xpValue: number;
-}
-
-export interface DailyLog {
+export interface DailyActivity {
   date: string;
-  completed: number;
-  total: number;
+  commits: number;
+  issuesClosed: number;
+  prsMerged: number;
+  milestonesCompleted: number;
   xpEarned: number;
-  perfect: boolean;
-}
-
-export interface GameAction {
-  type: ActionType;
-  timestamp: string;
-  commitHash: string;
-  details: Record<string, unknown>;
-  xpChange: number;
   hpChange: number;
 }
 
-export type ActionType =
-  | "CHARACTER_CREATE"
-  | "ZONE_CREATE"
-  | "QUEST_CREATE"
-  | "QUEST_ACTIVATE"
-  | "QUEST_COMPLETE"
-  | "QUEST_ABANDON"
-  | "DAILY"
-  | "DAILY_CONFIG"
-  | "UNKNOWN";
+// XP/HP constants
+export const XP_VALUES = {
+  COMMIT: 10,
+  ISSUE_CLOSED: 25,
+  PR_MERGED: 50,
+  MILESTONE_COMPLETED: 200,
+  STREAK_BONUS: 15,
+  PERFECT_DAY_BONUS: 50, // Activity in all active repos
+} as const;
 
-export interface GitCommit {
-  hash: string;
-  message: string;
-  date: string;
-  author: string;
-}
+export const HP_VALUES = {
+  MAX_HP: 100,
+  DAILY_ACTIVITY: 5, // HP gain per day with activity
+  NO_ACTIVITY: -10, // HP loss per day without activity
+  PERFECT_DAY: 10, // Bonus HP for activity in ALL active repos
+} as const;
 
-export interface GameState {
-  character: Character;
-  zones: Zone[];
-  quests: Quest[];
-  dailyConfig: DailyConfig[];
-  dailyLogs: DailyLog[];
-  recentActions: GameAction[];
-  totalXpEarned: number;
-  totalHpLost: number;
-  totalHpGained: number;
-  questsCompleted: number;
-  currentStreak: number;
-  longestStreak: number;
-  graveyard: Character[];
-  lastUpdated: string;
-  verified: boolean;
-  verificationErrors: string[];
-  missedQuests: { name: string; date: string; hpLost: number }[];
-  missedDailies: { date: string; hpLost: number }[];
-}
-
-// Simple leveling: 100 XP per level
+// Level calculation: 100 XP per level
 export function calculateLevel(totalXp: number): { level: number; xpToNextLevel: number } {
   const level = Math.floor(totalXp / 100) + 1;
   const xpIntoCurrentLevel = totalXp % 100;
@@ -98,7 +132,33 @@ export function calculateLevel(totalXp: number): { level: number; xpToNextLevel:
   return { level, xpToNextLevel };
 }
 
-// Fixed max HP at 100
-export function calculateMaxHp(): number {
-  return 100;
+// Calculate XP from daily activity
+export function calculateDailyXp(activity: {
+  commits: number;
+  issuesClosed: number;
+  prsMerged: number;
+  milestonesCompleted: number;
+  isStreak: boolean;
+}): number {
+  let xp = 0;
+  xp += activity.commits * XP_VALUES.COMMIT;
+  xp += activity.issuesClosed * XP_VALUES.ISSUE_CLOSED;
+  xp += activity.prsMerged * XP_VALUES.PR_MERGED;
+  xp += activity.milestonesCompleted * XP_VALUES.MILESTONE_COMPLETED;
+  if (activity.isStreak) {
+    xp += XP_VALUES.STREAK_BONUS;
+  }
+  return xp;
+}
+
+// Calculate HP change from daily activity
+export function calculateDailyHp(hasActivity: boolean, isPerfectDay: boolean): number {
+  if (!hasActivity) {
+    return HP_VALUES.NO_ACTIVITY;
+  }
+  let hp = HP_VALUES.DAILY_ACTIVITY;
+  if (isPerfectDay) {
+    hp += HP_VALUES.PERFECT_DAY;
+  }
+  return hp;
 }
