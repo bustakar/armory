@@ -1,6 +1,5 @@
 export interface Character {
   name: string;
-  title: string;
   level: number;
   xp: number;
   xpToNextLevel: number;
@@ -12,26 +11,35 @@ export interface Character {
   deathDate?: string;
 }
 
-export interface Path {
-  name: string;
-  level: number;
-  xp: number;
-}
-
 export interface Zone {
   name: string;
-  path: string;
-  enteredAt: string;
-  subregions: Subregion[];
+  createdAt: string;
+  questsCompleted: number;
+  questsActive: number;
+  questsBacklog: number;
 }
 
-export interface Subregion {
+export interface Quest {
   name: string;
   zone: string;
-  status: "locked" | "active" | "paused" | "cleared";
-  questXpEarned: number;
-  lastActivity?: string;
-  daysSinceActivity?: number;
+  xpValue: number;
+  status: "backlog" | "active" | "completed" | "abandoned" | "missed";
+  createdAt: string;
+  activatedAt?: string;
+  completedAt?: string;
+}
+
+export interface DailyConfig {
+  name: string;
+  xpValue: number;
+}
+
+export interface DailyLog {
+  date: string;
+  completed: number;
+  total: number;
+  xpEarned: number;
+  perfect: boolean;
 }
 
 export interface GameAction {
@@ -45,23 +53,13 @@ export interface GameAction {
 
 export type ActionType =
   | "CHARACTER_CREATE"
-  | "CHARACTER_DEATH"
-  | "CHARACTER_LEVEL"
-  | "PATH_CREATE"
-  | "PATH_LEVEL"
-  | "ZONE_ENTER"
-  | "ZONE_MILESTONE"
-  | "SUBREGION_ACTIVATE"
-  | "SUBREGION_UPDATE"
-  | "SUBREGION_CLEAR"
+  | "ZONE_CREATE"
   | "QUEST_CREATE"
+  | "QUEST_ACTIVATE"
   | "QUEST_COMPLETE"
   | "QUEST_ABANDON"
   | "DAILY"
-  | "WORLD_QUEST"
-  | "ACHIEVEMENT_UNLOCK"
-  | "STREAK"
-  | "PERFECT_WEEK"
+  | "DAILY_CONFIG"
   | "UNKNOWN";
 
 export interface GitCommit {
@@ -73,64 +71,34 @@ export interface GitCommit {
 
 export interface GameState {
   character: Character;
-  paths: Path[];
   zones: Zone[];
-  activeSubregions: Subregion[];
+  quests: Quest[];
+  dailyConfig: DailyConfig[];
+  dailyLogs: DailyLog[];
   recentActions: GameAction[];
   totalXpEarned: number;
   totalHpLost: number;
+  totalHpGained: number;
   questsCompleted: number;
-  subregionsCleared: number;
   currentStreak: number;
   longestStreak: number;
   graveyard: Character[];
   lastUpdated: string;
   verified: boolean;
   verificationErrors: string[];
+  missedQuests: { name: string; date: string; hpLost: number }[];
+  missedDailies: { date: string; hpLost: number }[];
 }
 
-export interface LevelThreshold {
-  level: number;
-  totalXp: number;
-}
-
-export const LEVEL_THRESHOLDS: LevelThreshold[] = [
-  { level: 1, totalXp: 0 },
-  { level: 2, totalXp: 100 },
-  { level: 3, totalXp: 250 },
-  { level: 4, totalXp: 450 },
-  { level: 5, totalXp: 700 },
-  { level: 6, totalXp: 1000 },
-  { level: 7, totalXp: 1400 },
-  { level: 8, totalXp: 1900 },
-  { level: 9, totalXp: 2500 },
-  { level: 10, totalXp: 3200 },
-  // After level 10, it's linear +800 per level
-];
-
+// Simple leveling: 100 XP per level
 export function calculateLevel(totalXp: number): { level: number; xpToNextLevel: number } {
-  // Check thresholds up to level 10
-  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (totalXp >= LEVEL_THRESHOLDS[i].totalXp) {
-      if (i === LEVEL_THRESHOLDS.length - 1) {
-        // Beyond level 10, linear progression
-        const xpAbove10 = totalXp - LEVEL_THRESHOLDS[i].totalXp;
-        const levelsAbove10 = Math.floor(xpAbove10 / 800);
-        const level = 10 + levelsAbove10;
-        const currentLevelXp = LEVEL_THRESHOLDS[i].totalXp + levelsAbove10 * 800;
-        const nextLevelXp = currentLevelXp + 800;
-        return { level, xpToNextLevel: nextLevelXp - totalXp };
-      }
-      const nextThreshold = LEVEL_THRESHOLDS[i + 1];
-      return {
-        level: LEVEL_THRESHOLDS[i].level,
-        xpToNextLevel: nextThreshold.totalXp - totalXp,
-      };
-    }
-  }
-  return { level: 1, xpToNextLevel: 100 - totalXp };
+  const level = Math.floor(totalXp / 100) + 1;
+  const xpIntoCurrentLevel = totalXp % 100;
+  const xpToNextLevel = 100 - xpIntoCurrentLevel;
+  return { level, xpToNextLevel };
 }
 
-export function calculateMaxHp(level: number): number {
-  return 100 + (level - 1) * 10;
+// Fixed max HP at 100
+export function calculateMaxHp(): number {
+  return 100;
 }

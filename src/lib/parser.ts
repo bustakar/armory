@@ -1,35 +1,25 @@
-import {
+import type {
   GameAction,
   ActionType,
   GitCommit,
   GameState,
   Character,
-  Path,
   Zone,
-  Subregion,
-  calculateLevel,
-  calculateMaxHp,
+  Quest,
+  DailyConfig,
+  DailyLog,
 } from "./types";
+import { calculateLevel, calculateMaxHp } from "./types";
 
 const ACTION_PATTERNS: { pattern: RegExp; type: ActionType }[] = [
   { pattern: /^CHARACTER CREATE "([^"]+)"/, type: "CHARACTER_CREATE" },
-  { pattern: /^CHARACTER DEATH/, type: "CHARACTER_DEATH" },
-  { pattern: /^CHARACTER LEVEL/, type: "CHARACTER_LEVEL" },
-  { pattern: /^PATH CREATE "([^"]+)"/, type: "PATH_CREATE" },
-  { pattern: /^PATH LEVEL "([^"]+)"/, type: "PATH_LEVEL" },
-  { pattern: /^ZONE ENTER "([^"]+)"/, type: "ZONE_ENTER" },
-  { pattern: /^ZONE MILESTONE/, type: "ZONE_MILESTONE" },
-  { pattern: /^SUBREGION ACTIVATE "([^"]+)"/, type: "SUBREGION_ACTIVATE" },
-  { pattern: /^SUBREGION UPDATE "([^"]+)"/, type: "SUBREGION_UPDATE" },
-  { pattern: /^SUBREGION CLEAR "([^"]+)"/, type: "SUBREGION_CLEAR" },
+  { pattern: /^ZONE CREATE "([^"]+)"/, type: "ZONE_CREATE" },
   { pattern: /^QUEST CREATE "([^"]+)"/, type: "QUEST_CREATE" },
+  { pattern: /^QUEST ACTIVATE "([^"]+)"/, type: "QUEST_ACTIVATE" },
   { pattern: /^QUEST COMPLETE "([^"]+)"/, type: "QUEST_COMPLETE" },
   { pattern: /^QUEST ABANDON "([^"]+)"/, type: "QUEST_ABANDON" },
   { pattern: /^DAILY \d+\/\d+/, type: "DAILY" },
-  { pattern: /^WORLD QUEST "([^"]+)"/, type: "WORLD_QUEST" },
-  { pattern: /^ACHIEVEMENT UNLOCK "([^"]+)"/, type: "ACHIEVEMENT_UNLOCK" },
-  { pattern: /^STREAK \d+/, type: "STREAK" },
-  { pattern: /^PERFECT WEEK/, type: "PERFECT_WEEK" },
+  { pattern: /^DAILY CONFIG/, type: "DAILY_CONFIG" },
 ];
 
 export function parseCommitMessage(message: string): { type: ActionType; details: Record<string, unknown> } {
@@ -45,45 +35,36 @@ export function parseCommitMessage(message: string): { type: ActionType; details
       const quoted = Array.from(quotedMatches).map((m) => m[1]);
       if (quoted.length > 0) {
         details.name = quoted[0];
-        if (quoted.length > 1) {
-          details.target = quoted[1];
-        }
       }
 
-      // Extract XP
+      // Extract XP gain
       const xpMatch = trimmed.match(/\+(\d+)\s*XP/i);
-      if (xpMatch) {
+      if (xpMatch && xpMatch[1]) {
         details.xp = parseInt(xpMatch[1], 10);
       }
 
-      // Extract HP loss
-      const hpMatch = trimmed.match(/-(\d+)\s*HP/i);
-      if (hpMatch) {
-        details.hpLoss = parseInt(hpMatch[1], 10);
+      // Extract XP value for quest creation (e.g., "50 in zone")
+      const questXpMatch = trimmed.match(/"[^"]+"\s+(\d+)\s+in/);
+      if (questXpMatch && questXpMatch[1]) {
+        details.xpValue = parseInt(questXpMatch[1], 10);
       }
 
       // Extract daily completion
       const dailyMatch = trimmed.match(/DAILY (\d+)\/(\d+)/);
-      if (dailyMatch) {
+      if (dailyMatch && dailyMatch[1] && dailyMatch[2]) {
         details.completed = parseInt(dailyMatch[1], 10);
         details.total = parseInt(dailyMatch[2], 10);
       }
 
-      // Extract "in" clause for zone/subregion
-      const inMatch = trimmed.match(/in (\S+)/);
+      // Extract "in" clause for zone
+      const inMatch = trimmed.match(/in\s+(\S+)/);
       if (inMatch) {
-        details.location = inMatch[1];
+        details.zone = inMatch[1];
       }
 
-      // Extract level
-      const levelMatch = trimmed.match(/Level (\d+)/);
-      if (levelMatch) {
-        details.level = parseInt(levelMatch[1], 10);
-      }
-
-      // Check for PERFECT DAY bonus
-      if (trimmed.includes("PERFECT DAY")) {
-        details.perfectDay = true;
+      // Check for PERFECT bonus
+      if (trimmed.includes("PERFECT")) {
+        details.perfect = true;
       }
 
       return { type, details };
@@ -103,12 +84,8 @@ export function parseCommit(commit: GitCommit): GameAction {
     xpChange = details.xp;
   }
 
-  if (typeof details.hpLoss === "number") {
-    hpChange = -details.hpLoss;
-  }
-
   // Perfect day bonus
-  if (details.perfectDay) {
+  if (details.perfect) {
     xpChange += 50;
   }
 
@@ -122,38 +99,47 @@ export function parseCommit(commit: GitCommit): GameAction {
   };
 }
 
-export function buildGameState(commits: GitCommit[]): GameState {
+function getDateString(timestamp: string): string {
+  return timestamp.split("T")[0];
+}
+
+export function buildGameState(commits: GitCommit[], dailyConfig: DailyConfig[] = []): GameState {
   const actions: GameAction[] = commits.map(parseCommit).filter((a) => a.type !== "UNKNOWN");
 
   // Sort by timestamp (oldest first)
   actions.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   let character: Character | null = null;
-  const paths: Map<string, Path> = new Map();
   const zones: Map<string, Zone> = new Map();
-  const activeSubregions: Map<string, Subregion> = new Map();
+  const quests: Map<string, Quest> = new Map();
+  const dailyLogs: DailyLog[] = [];
   const graveyard: Character[] = [];
 
   let totalXp = 0;
   let totalHpLost = 0;
+  let totalHpGained = 0;
   let currentHp = 100;
   let questsCompleted = 0;
-  let subregionsCleared = 0;
   const verificationErrors: string[] = [];
+  const missedQuests: { name: string; date: string; hpLost: number }[] = [];
+  const missedDailies: { date: string; hpLost: number }[] = [];
 
-  // Track daily commits for streak calculation
+  // Track active quests by date for miss detection
+  const activeQuestsByDate: Map<string, Set<string>> = new Map();
+  const completedQuestsByDate: Map<string, Set<string>> = new Map();
   const dailyDates: Set<string> = new Set();
 
+  // First pass: process all actions
   for (const action of actions) {
+    const date = getDateString(action.timestamp);
+
     switch (action.type) {
       case "CHARACTER_CREATE": {
         if (character && character.isAlive) {
-          // Archive current character
           graveyard.push({ ...character, isAlive: false, deathCause: "Replaced" });
         }
         character = {
           name: String(action.details.name || "Unknown"),
-          title: "Newcomer",
           level: 1,
           xp: 0,
           xpToNextLevel: 100,
@@ -164,122 +150,163 @@ export function buildGameState(commits: GitCommit[]): GameState {
         };
         totalXp = 0;
         currentHp = 100;
-        paths.clear();
+        totalHpLost = 0;
+        totalHpGained = 0;
         zones.clear();
-        activeSubregions.clear();
+        quests.clear();
         break;
       }
 
-      case "CHARACTER_DEATH": {
-        if (character) {
-          character.isAlive = false;
-          character.deathDate = action.timestamp;
-          character.deathCause = String(action.details.cause || "Unknown");
-          graveyard.push({ ...character });
-          character = null;
-        }
-        break;
-      }
-
-      case "PATH_CREATE": {
-        const pathName = String(action.details.name || "Unknown");
-        paths.set(pathName, { name: pathName, level: 1, xp: 0 });
-        break;
-      }
-
-      case "ZONE_ENTER": {
+      case "ZONE_CREATE": {
         const zoneName = String(action.details.name || "Unknown");
-        const pathName = String(action.details.location || "Unknown");
         zones.set(zoneName, {
           name: zoneName,
-          path: pathName,
-          enteredAt: action.timestamp,
-          subregions: [],
+          createdAt: action.timestamp,
+          questsCompleted: 0,
+          questsActive: 0,
+          questsBacklog: 0,
         });
         break;
       }
 
-      case "SUBREGION_ACTIVATE": {
-        const subregionPath = String(action.details.name || "Unknown");
-        const [zoneName, subregionName] = subregionPath.includes("/")
-          ? subregionPath.split("/")
-          : ["Unknown", subregionPath];
-
-        activeSubregions.set(subregionPath, {
-          name: subregionName,
-          zone: zoneName,
-          status: "active",
-          questXpEarned: 0,
-          lastActivity: action.timestamp,
-          daysSinceActivity: 0,
+      case "QUEST_CREATE": {
+        const questName = String(action.details.name || "Unknown");
+        const xpValue = typeof action.details.xpValue === "number" ? action.details.xpValue : 50;
+        const zone = String(action.details.zone || "unknown");
+        quests.set(questName, {
+          name: questName,
+          zone,
+          xpValue,
+          status: "backlog",
+          createdAt: action.timestamp,
         });
         break;
       }
 
-      case "SUBREGION_UPDATE": {
-        const subregionPath = String(action.details.name || "Unknown");
-        const subregion = activeSubregions.get(subregionPath);
-        if (subregion) {
-          subregion.lastActivity = action.timestamp;
+      case "QUEST_ACTIVATE": {
+        const questName = String(action.details.name || "Unknown");
+        const quest = quests.get(questName);
+        if (quest) {
+          quest.status = "active";
+          quest.activatedAt = action.timestamp;
         }
-        break;
-      }
-
-      case "SUBREGION_CLEAR": {
-        const subregionPath = String(action.details.name || "Unknown");
-        const subregion = activeSubregions.get(subregionPath);
-        if (subregion) {
-          subregion.status = "cleared";
-          subregionsCleared++;
+        // Track for miss detection
+        if (!activeQuestsByDate.has(date)) {
+          activeQuestsByDate.set(date, new Set());
         }
-        totalXp += action.xpChange;
+        activeQuestsByDate.get(date)!.add(questName);
         break;
       }
 
       case "QUEST_COMPLETE": {
-        questsCompleted++;
-        totalXp += action.xpChange;
+        const questName = String(action.details.name || "Unknown");
+        const quest = quests.get(questName);
+        if (quest) {
+          quest.status = "completed";
+          quest.completedAt = action.timestamp;
+          questsCompleted++;
+          totalXp += action.xpChange;
+          // +10 HP for completing a quest
+          currentHp = Math.min(currentHp + 10, 100);
+          totalHpGained += 10;
 
-        // Update subregion activity if location specified
-        const location = String(action.details.location || "");
-        if (location && activeSubregions.has(location)) {
-          const subregion = activeSubregions.get(location)!;
-          subregion.lastActivity = action.timestamp;
-          subregion.questXpEarned += action.xpChange;
+          // Update zone stats
+          const zone = zones.get(quest.zone);
+          if (zone) {
+            zone.questsCompleted++;
+          }
         }
+        // Track completion
+        if (!completedQuestsByDate.has(date)) {
+          completedQuestsByDate.set(date, new Set());
+        }
+        completedQuestsByDate.get(date)!.add(questName);
         break;
       }
 
       case "QUEST_ABANDON": {
-        currentHp += action.hpChange; // hpChange is negative
-        totalHpLost += Math.abs(action.hpChange);
+        const questName = String(action.details.name || "Unknown");
+        const quest = quests.get(questName);
+        if (quest) {
+          quest.status = "abandoned";
+          // -1x XP value as HP
+          const hpLoss = quest.xpValue;
+          currentHp -= hpLoss;
+          totalHpLost += hpLoss;
+        }
         break;
       }
 
       case "DAILY": {
-        totalXp += action.xpChange;
-        const date = action.timestamp.split("T")[0];
-        dailyDates.add(date);
-        break;
-      }
+        const completed = action.details.completed as number;
+        const total = action.details.total as number;
+        const perfect = action.details.perfect as boolean;
 
-      case "WORLD_QUEST":
-      case "ACHIEVEMENT_UNLOCK":
-      case "STREAK":
-      case "PERFECT_WEEK":
-      case "ZONE_MILESTONE":
-      case "PATH_LEVEL": {
         totalXp += action.xpChange;
+        dailyDates.add(date);
+
+        dailyLogs.push({
+          date,
+          completed,
+          total,
+          xpEarned: action.xpChange,
+          perfect: perfect || completed === total,
+        });
+
+        // +10 HP if all dailies completed
+        if (completed === total) {
+          currentHp = Math.min(currentHp + 10, 100);
+          totalHpGained += 10;
+        }
         break;
       }
     }
   }
 
+  // Second pass: detect missed quests (activated but not completed same day)
+  for (const [date, activatedQuests] of activeQuestsByDate) {
+    const completedThisDay = completedQuestsByDate.get(date) || new Set();
+
+    for (const questName of activatedQuests) {
+      if (!completedThisDay.has(questName)) {
+        const quest = quests.get(questName);
+        if (quest && quest.status !== "completed" && quest.status !== "abandoned") {
+          // Mark as missed and apply penalty
+          quest.status = "missed";
+          const hpLoss = Math.round(quest.xpValue * 0.5);
+          currentHp -= hpLoss;
+          totalHpLost += hpLoss;
+          missedQuests.push({ name: questName, date, hpLost: hpLoss });
+        }
+      }
+    }
+  }
+
+  // Third pass: detect missed daily days
+  if (character && character.createdAt && dailyConfig.length > 0) {
+    const startDate = new Date(character.createdAt);
+    const today = new Date();
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= today) {
+      const dateStr = currentDate.toISOString().split("T")[0];
+      if (!dailyDates.has(dateStr) && dateStr !== today.toISOString().split("T")[0]) {
+        // No daily commit for this day - penalty for all dailies
+        const totalDailyXp = dailyConfig.reduce((sum, d) => sum + d.xpValue, 0);
+        const hpLoss = Math.round(totalDailyXp * 0.5);
+        currentHp -= hpLoss;
+        totalHpLost += hpLoss;
+        missedDailies.push({ date: dateStr, hpLost: hpLoss });
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+  }
+
   // Calculate current level from total XP
   const { level, xpToNextLevel } = calculateLevel(totalXp);
-  const maxHp = calculateMaxHp(level);
+  const maxHp = calculateMaxHp();
 
-  // Ensure HP doesn't exceed max
+  // Ensure HP bounds
   currentHp = Math.min(currentHp, maxHp);
   currentHp = Math.max(currentHp, 0);
 
@@ -293,22 +320,27 @@ export function buildGameState(commits: GitCommit[]): GameState {
     if (i === 0) {
       tempStreak = 1;
     } else {
-      const prevDate = new Date(sortedDates[i - 1]);
-      const currDate = new Date(sortedDates[i]);
-      const diffDays = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+      const prevDateStr = sortedDates[i - 1];
+      const currDateStr = sortedDates[i];
+      if (prevDateStr && currDateStr) {
+        const prevDate = new Date(prevDateStr);
+        const currDate = new Date(currDateStr);
+        const diffDays = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
 
-      if (diffDays === 1) {
-        tempStreak++;
-      } else {
-        tempStreak = 1;
+        if (diffDays === 1) {
+          tempStreak++;
+        } else {
+          tempStreak = 1;
+        }
       }
     }
     longestStreak = Math.max(longestStreak, tempStreak);
   }
 
-  // Check if current streak is ongoing (last daily was yesterday or today)
-  if (sortedDates.length > 0) {
-    const lastDate = new Date(sortedDates[sortedDates.length - 1]);
+  // Check if current streak is ongoing
+  const lastDateStr = sortedDates[sortedDates.length - 1];
+  if (lastDateStr) {
+    const lastDate = new Date(lastDateStr);
     const today = new Date();
     const diffDays = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays <= 1) {
@@ -328,13 +360,21 @@ export function buildGameState(commits: GitCommit[]): GameState {
     if (currentHp <= 0) {
       character.isAlive = false;
       character.deathCause = "HP reached 0";
-      verificationErrors.push("Character HP is 0 or below - character should be dead");
+      verificationErrors.push("Character HP is 0 or below - character is dead");
+    }
+  }
+
+  // Update zone stats
+  for (const quest of quests.values()) {
+    const zone = zones.get(quest.zone);
+    if (zone) {
+      if (quest.status === "active") zone.questsActive++;
+      if (quest.status === "backlog") zone.questsBacklog++;
     }
   }
 
   const finalCharacter: Character = character || {
     name: "No Character",
-    title: "None",
     level: 0,
     xp: 0,
     xpToNextLevel: 0,
@@ -346,19 +386,22 @@ export function buildGameState(commits: GitCommit[]): GameState {
 
   return {
     character: finalCharacter,
-    paths: Array.from(paths.values()),
     zones: Array.from(zones.values()),
-    activeSubregions: Array.from(activeSubregions.values()).filter((s) => s.status === "active"),
+    quests: Array.from(quests.values()),
+    dailyConfig,
+    dailyLogs,
     recentActions: actions.slice(-20).reverse(),
     totalXpEarned: totalXp,
     totalHpLost,
+    totalHpGained,
     questsCompleted,
-    subregionsCleared,
     currentStreak,
     longestStreak,
     graveyard,
     lastUpdated: new Date().toISOString(),
     verified: verificationErrors.length === 0,
     verificationErrors,
+    missedQuests,
+    missedDailies,
   };
 }
