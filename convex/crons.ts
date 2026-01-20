@@ -3,11 +3,11 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Run daily at midnight UTC to check for missed dailies and subregion inactivity
-crons.daily(
-  "daily-hp-check",
-  { hourUTC: 0, minuteUTC: 0 },
-  internal.scanner.processDailyChecks
+// Run every hour to check GitHub activity and update HP
+crons.hourly(
+  "hp-updates",
+  { minuteUTC: 0 },
+  internal.scanner.processHourlyUpdates
 );
 
 export default crons;

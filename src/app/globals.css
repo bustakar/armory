@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --pixel-green: #00ff00;
+  --pixel-dark-green: #00aa00;
+  --pixel-red: #ff0000;
+  --pixel-dark-red: #aa0000;
+  --pixel-gold: #ffd700;
+  --pixel-purple: #9333ea;
+  --pixel-bg: #0a0a0a;
+  --pixel-border: #333333;
+}
+
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: var(--pixel-green);
+  background: var(--pixel-bg);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  image-rendering: pixelated;
+}
+
+/* Pixel art border style */
+.pixel-border {
+  border: 4px solid var(--pixel-border);
+  box-shadow:
+    4px 4px 0 0 var(--pixel-border),
+    -4px -4px 0 0 var(--pixel-border),
+    4px -4px 0 0 var(--pixel-border),
+    -4px 4px 0 0 var(--pixel-border);
+}
+
+/* HP Bar animations */
+@keyframes pulse-danger {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.hp-danger {
+  animation: pulse-danger 0.5s ease-in-out infinite;
+}
+
+/* Retro scanline effect */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.1) 0px,
+    rgba(0, 0, 0, 0.1) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+}

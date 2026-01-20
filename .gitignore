@@ -1,45 +1,43 @@
-# dependencies (bun install)
+# dependencies
 node_modules
 
-# output
-out
-dist
-*.tgz
+# Next.js
+.next/
+out/
+build/
 
-# code coverage
-coverage
-*.lcov
-
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
-
-# dotenv environment variable files
+# env files
 .env
+.env*.local
 .env.development.local
 .env.test.local
 .env.production.local
-.env.local
+
+# logs
+logs
+*.log
+npm-debug.log*
 
 # caches
 .eslintcache
 .cache
 *.tsbuildinfo
-
-# IntelliJ based IDEs
-.idea
-
-# Finder (MacOS) folder config
-.DS_Store
-
-# TanStack Start
-.vinxi
-.output
 .vercel
 
-# Generated files
-src/routeTree.gen.ts
-
-# Cursor
+# IDE
+.idea
 .cursor
+
+# OS
+.DS_Store
+
+# Testing
+coverage
+*.lcov
+
+# Build outputs
+dist
+*.tgz
+
+# Convex
+.convex/

@@ -1,164 +1,163 @@
-import { internalAction, internalMutation } from "./_generated/server";
+"use node";
+
+import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { v } from "convex/values";
+import {
+  HP_DRAIN_PER_REPO_PER_HOUR,
+  REWARDS,
+  getTodayString,
+} from "./game";
+import { fetchCommits, fetchClosedIssues, fetchMergedPRs } from "./github";
 
-interface GitHubCommit {
-  sha: string;
-  commit: {
-    message: string;
-    author: {
-      name: string;
-      date: string;
-    };
-  };
-}
-
-// Fetch commits from GitHub
-async function fetchGitHubCommits(
-  owner: string,
-  repo: string,
-  since?: string
-): Promise<GitHubCommit[]> {
-  let url = `https://api.github.com/repos/${owner}/${repo}/commits?per_page=100`;
-  if (since) {
-    url += `&since=${since}`;
-  }
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      ...(process.env.GITHUB_TOKEN
-        ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-        : {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.status}`);
-  }
-
-  return response.json();
-}
-
-// Check if a commit hash exists in the repo history
-async function commitExists(
-  owner: string,
-  repo: string,
-  hash: string
-): Promise<boolean> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/commits/${hash}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github.v3+json",
-      ...(process.env.GITHUB_TOKEN
-        ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-        : {}),
-    },
-  });
-
-  return response.ok;
-}
-
-// Process daily checks for all registered grimoires
-export const processDailyChecks = internalAction({
+// Main hourly cron job
+export const processHourlyUpdates = internalAction({
   handler: async (ctx) => {
-    // Get all registered grimoires
-    const grimoires = await ctx.runQuery(internal.grimoires.listAll);
+    // Get all users with active commitments
+    const usersWithCommitments = await ctx.runMutation(
+      internal.scannerMutations.getUsersWithActiveCommitments
+    );
 
-    for (const grimoire of grimoires) {
+    for (const userData of usersWithCommitments) {
       try {
-        // Check for history rewrites
-        const hashExists = await commitExists(
-          grimoire.owner,
-          grimoire.repo,
-          grimoire.lastCommitHash
-        );
-
-        if (!hashExists) {
-          // History was rewritten!
-          await ctx.runMutation(internal.grimoires.recordRewrite, {
-            owner: grimoire.owner,
-            repo: grimoire.repo,
-          });
-        }
-
-        // Fetch latest commits
-        const commits = await fetchGitHubCommits(
-          grimoire.owner,
-          grimoire.repo
-        );
-
-        if (commits.length > 0) {
-          const latestHash = commits[0]!.sha.substring(0, 7);
-
-          // Check for daily commits
-          const today = new Date().toISOString().split("T")[0]!;
-          const hasDailyCommit = commits.some((c) => {
-            const commitDate = c.commit.author.date.split("T")[0];
-            const isDailyCommit = c.commit.message.includes("DAILY");
-            return commitDate === today && isDailyCommit;
-          });
-
-          // Log the daily check
-          await ctx.runMutation(internal.scanner.logDailyCheck, {
-            owner: grimoire.owner,
-            repo: grimoire.repo,
-            date: today,
-            hadDailyCommit: hasDailyCommit,
-          });
-
-          // Update cache with latest hash
-          await ctx.runMutation(internal.grimoires.upsert, {
-            owner: grimoire.owner,
-            repo: grimoire.repo,
-            lastCommitHash: latestHash,
-            totalCommits: commits.length,
-          });
-        }
+        await processUserActivity(ctx, userData);
       } catch (error) {
-        console.error(
-          `Error processing grimoire ${grimoire.owner}/${grimoire.repo}:`,
-          error
-        );
+        console.error(`Error processing user ${userData.userId}:`, error);
       }
     }
   },
 });
 
-// Log daily check result
-export const logDailyCheck = internalMutation({
-  args: {
-    owner: v.string(),
-    repo: v.string(),
-    date: v.string(),
-    hadDailyCommit: v.boolean(),
-  },
-  handler: async (ctx, args) => {
-    // Check if already logged for this date
-    const existing = await ctx.db
-      .query("dailyLogs")
-      .withIndex("by_grimoire_date", (q) =>
-        q
-          .eq("owner", args.owner)
-          .eq("repo", args.repo)
-          .eq("date", args.date)
-      )
-      .first();
+// Process a single user's activity
+async function processUserActivity(
+  ctx: any,
+  userData: {
+    userId: string;
+    characterId: string;
+    githubUsername: string;
+    githubAccessToken: string;
+    commitments: Array<{
+      _id: string;
+      owner: string;
+      repo: string;
+      lastScannedAt?: number;
+    }>;
+  }
+) {
+  const now = Date.now();
+  const today = getTodayString();
+  let totalHpGain = 0;
+  let totalXpGain = 0;
 
-    if (existing) return;
+  // Calculate HP drain based on active repo count
+  const hpDrain = HP_DRAIN_PER_REPO_PER_HOUR * userData.commitments.length;
 
-    // Calculate HP change: -5 if missed daily commit, +10 if complete
-    // Note: This is simplified - real implementation would parse the commit
-    const hpChange = args.hadDailyCommit ? 10 : -5;
+  // Process each commitment
+  for (const commitment of userData.commitments) {
+    const since = new Date(commitment.lastScannedAt || now - 60 * 60 * 1000);
 
-    await ctx.db.insert("dailyLogs", {
-      owner: args.owner,
-      repo: args.repo,
-      date: args.date,
-      hadDailyCommit: args.hadDailyCommit,
-      hpChange,
-      processedAt: Date.now(),
+    // Fetch GitHub activity
+    const [commits, issues, prs] = await Promise.all([
+      fetchCommits(
+        userData.githubAccessToken,
+        commitment.owner,
+        commitment.repo,
+        userData.githubUsername,
+        since
+      ),
+      fetchClosedIssues(
+        userData.githubAccessToken,
+        commitment.owner,
+        commitment.repo,
+        userData.githubUsername,
+        since
+      ),
+      fetchMergedPRs(
+        userData.githubAccessToken,
+        commitment.owner,
+        commitment.repo,
+        userData.githubUsername,
+        since
+      ),
+    ]);
+
+    // Get daily caps
+    const dailyActivity = await ctx.runMutation(
+      internal.scannerMutations.getDailyActivity,
+      {
+        commitmentId: commitment._id,
+        date: today,
+      }
+    );
+
+    // Calculate rewards with daily caps
+    const cappedCommits = Math.min(
+      commits.length,
+      REWARDS.commit.dailyCap - (dailyActivity?.commits || 0)
+    );
+    const cappedIssues = Math.min(
+      issues.length,
+      REWARDS.issueClosed.dailyCap - (dailyActivity?.issuesClosed || 0)
+    );
+
+    const commitHp = cappedCommits * REWARDS.commit.hp;
+    const commitXp = cappedCommits * REWARDS.commit.xp;
+    const issueHp = cappedIssues * REWARDS.issueClosed.hp;
+    const issueXp = cappedIssues * REWARDS.issueClosed.xp;
+    const prHp = prs.length * REWARDS.prMerged.hp;
+    const prXp = prs.length * REWARDS.prMerged.xp;
+
+    totalHpGain += commitHp + issueHp + prHp;
+    totalXpGain += commitXp + issueXp + prXp;
+
+    // Update commitment stats
+    await ctx.runMutation(internal.scannerMutations.updateCommitmentStats, {
+      commitmentId: commitment._id,
+      commits: commits.length,
+      issuesClosed: issues.length,
+      prsMerged: prs.length,
+      xpEarned: commitXp + issueXp + prXp,
+      lastScannedAt: now,
     });
-  },
-});
+
+    // Update daily activity tracking
+    await ctx.runMutation(internal.scannerMutations.updateDailyActivity, {
+      userId: userData.userId,
+      commitmentId: commitment._id,
+      date: today,
+      commits: cappedCommits,
+      issuesClosed: cappedIssues,
+    });
+  }
+
+  // Calculate net HP change
+  const hpNet = totalHpGain - hpDrain;
+
+  // Update character HP and XP
+  const newHp = await ctx.runMutation(internal.scannerMutations.updateCharacterHp, {
+    characterId: userData.characterId,
+    hpChange: hpNet,
+    xpGain: totalXpGain,
+  });
+
+  // Log activity
+  await ctx.runMutation(internal.scannerMutations.logActivity, {
+    userId: userData.userId,
+    characterId: userData.characterId,
+    activeRepoCount: userData.commitments.length,
+    commits: 0,
+    issuesClosed: 0,
+    prsMerged: 0,
+    hpDrain,
+    hpGain: totalHpGain,
+    hpNet,
+    xpGained: totalXpGain,
+  });
+
+  // Check for death
+  if (newHp <= 0) {
+    await ctx.runMutation(internal.scannerMutations.killCharacter, {
+      characterId: userData.characterId,
+      activeRepoCount: userData.commitments.length,
+    });
+  }
+}

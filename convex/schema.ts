@@ -8,65 +8,73 @@ export default defineSchema({
     githubUsername: v.string(),
     githubAccessToken: v.string(),
     avatarUrl: v.optional(v.string()),
-    characterName: v.optional(v.string()),
     createdAt: v.number(),
-    lastLoginAt: v.number(),
   }).index("by_github_id", ["githubId"]),
 
-  // Active repos (Zones) - repos the user is tracking
-  activeRepos: defineTable({
-    userId: v.id("users"),
-    owner: v.string(),
-    repo: v.string(),
-    activatedAt: v.number(),
-    // Cache
-    lastScannedAt: v.optional(v.number()),
-    lastCommitSha: v.optional(v.string()),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_repo", ["userId", "owner", "repo"]),
-
-  // Cached activity data
-  activityCache: defineTable({
-    userId: v.id("users"),
-    date: v.string(), // YYYY-MM-DD
-    // Aggregated stats for the day
-    commits: v.number(),
-    issuesClosed: v.number(),
-    prsMerged: v.number(),
-    milestonesCompleted: v.number(),
-    // Calculated
-    xpEarned: v.number(),
-    hpChange: v.number(),
-    // Details (JSON stringified for flexibility)
-    details: v.optional(v.string()),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_date", ["userId", "date"]),
-
-  // Character state (calculated from activity)
+  // Character state - one active character per user
   characters: defineTable({
     userId: v.id("users"),
     name: v.string(),
-    level: v.number(),
-    xp: v.number(),
-    hp: v.number(),
-    maxHp: v.number(),
-    // Stats
+    hp: v.float64(), // Current HP (0-100)
+    maxHp: v.number(), // Always 100
+    xp: v.number(), // Total XP earned
+    level: v.number(), // floor(xp/100) + 1
+    streak: v.number(), // Consecutive days with activity
+    lastActivityDate: v.optional(v.string()), // YYYY-MM-DD for streak calculation
+    lastHpUpdate: v.number(), // Timestamp of last HP calculation
+    isAlive: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // 30-day commitment cycles
+  commitments: defineTable({
+    userId: v.id("users"),
+    characterId: v.id("characters"),
+    owner: v.string(), // GitHub owner
+    repo: v.string(), // GitHub repo
+    activatedAt: v.number(), // Timestamp
+    commitmentEndsAt: v.number(), // activatedAt + 30 days
+    deactivatedAt: v.optional(v.number()), // Set when commitment ends
+    wasEarlyExit: v.optional(v.boolean()),
+    renewalCount: v.number(), // Number of times renewed
+    // Cached stats (for history)
     totalCommits: v.number(),
     totalIssuesClosed: v.number(),
     totalPrsMerged: v.number(),
-    totalMilestonesCompleted: v.number(),
-    currentStreak: v.number(),
-    longestStreak: v.number(),
-    // Timestamps
-    createdAt: v.number(),
-    lastActivityAt: v.optional(v.number()),
-    // Death
-    isAlive: v.boolean(),
-    deathDate: v.optional(v.number()),
-    deathCause: v.optional(v.string()),
+    xpEarned: v.number(),
+    lastScannedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "deactivatedAt"])
+    .index("by_character", ["characterId"]),
+
+  // Activity logs - hourly snapshots
+  activityLogs: defineTable({
+    userId: v.id("users"),
+    characterId: v.id("characters"),
+    timestamp: v.number(),
+    activeRepoCount: v.number(),
+    // Activity in this hour
+    commits: v.number(),
+    issuesClosed: v.number(),
+    prsMerged: v.number(),
+    // HP changes
+    hpDrain: v.float64(), // Negative value
+    hpGain: v.float64(), // Positive value
+    hpNet: v.float64(), // Net change
+    xpGained: v.number(),
   }).index("by_user", ["userId"]),
+
+  // Daily activity caps tracking
+  dailyActivity: defineTable({
+    userId: v.id("users"),
+    commitmentId: v.id("commitments"),
+    date: v.string(), // YYYY-MM-DD
+    commits: v.number(), // Max 5 per day
+    issuesClosed: v.number(), // Max 3 per day
+  })
+    .index("by_commitment_date", ["commitmentId", "date"])
+    .index("by_user_date", ["userId", "date"]),
 
   // Graveyard - dead characters
   graveyard: defineTable({
@@ -74,9 +82,12 @@ export default defineSchema({
     name: v.string(),
     level: v.number(),
     xp: v.number(),
-    deathDate: v.number(),
+    diedAt: v.number(),
     deathCause: v.string(),
+    daysLived: v.number(),
+    // Stats at death
     totalCommits: v.number(),
-    daysPlayed: v.number(),
+    totalIssuesClosed: v.number(),
+    totalPrsMerged: v.number(),
   }).index("by_user", ["userId"]),
 });
