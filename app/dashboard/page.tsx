@@ -10,6 +10,7 @@ import { CreateCharacter } from "@/components/create-character";
 import { Graveyard } from "@/components/graveyard";
 import { TokenSettings } from "@/components/token-settings";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { AppShell } from "@/components/app-shell";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { Id } from "../../convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
@@ -161,95 +162,82 @@ export default function Dashboard() {
     isPrivate: r.isPrivate,
   }));
 
+  const userNav = (
+    <>
+      <a
+        href={`/u/${githubUsername}`}
+        className="text-sm text-[var(--pixel-green)] hover:underline"
+        title="View public profile"
+      >
+        @{githubUsername}
+      </a>
+      <UserButton afterSignOutUrl="/" />
+    </>
+  );
+
   return (
-    <main id="main" className="min-h-screen p-4 max-w-4xl mx-auto">
-      {/* Header */}
-      <header className="flex justify-between items-center mb-8 pb-4 border-b border-gray-700">
-        <h1 className="text-xl text-[var(--pixel-gold)]">ARMORY</h1>
-        <div className="flex items-center gap-4">
-          <a
-            href={`/u/${githubUsername}`}
-            className="text-sm text-[var(--pixel-green)] hover:underline"
-            title="View public profile"
-          >
-            @{githubUsername}
-          </a>
-          <UserButton afterSignOutUrl="/" />
-        </div>
-      </header>
+    <AppShell rightNav={userNav} centered={false}>
+      <div className="w-full max-w-4xl">
+        {/* No character - show creation form */}
+        {!character ? (
+          <CreateCharacter
+            githubUsername={githubUsername}
+            onSubmit={handleCreateCharacter}
+            isLoading={false}
+          />
+        ) : (
+          <div className="grid md:grid-cols-2 gap-8 pt-8">
+            {/* Left column */}
+            <div className="space-y-12">
+              {/* CHARACTER section */}
+              <section>
+                <h2 className="text-sm text-gray-400 mb-4">CHARACTER</h2>
+                <CharacterCard
+                  character={character}
+                  activeRepoCount={commitments?.length || 0}
+                  avatarUrl={avatarUrl}
+                />
+              </section>
 
-      {/* No character - show creation form */}
-      {!character ? (
-        <CreateCharacter
-          githubUsername={githubUsername}
-          onSubmit={handleCreateCharacter}
-          isLoading={false}
-        />
-      ) : (
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Left column - Character */}
-          <div className="space-y-6">
-            <CharacterCard
-              character={character}
-              activeRepoCount={commitments?.length || 0}
-              avatarUrl={avatarUrl}
-            />
+              {/* SETTINGS section */}
+              <section>
+                <h2 className="text-sm text-gray-400 mb-4">SETTINGS</h2>
+                <div className="space-y-4">
+                  <RepoSelector
+                    repos={reposForSelector}
+                    activeRepoNames={activeRepoNames}
+                    onActivate={handleActivate}
+                    isLoading={isLoadingRepos}
+                  />
+                  <TokenSettings />
+                </div>
+              </section>
+            </div>
 
-            <RepoSelector
-              repos={reposForSelector}
-              activeRepoNames={activeRepoNames}
-              onActivate={handleActivate}
-              isLoading={isLoadingRepos}
-            />
-
-            <TokenSettings />
-          </div>
-
-          {/* Right column - Commitments */}
-          <div className="space-y-6">
+            {/* Right column */}
             <div>
-              <h2 className="text-sm text-gray-400 mb-3">
-                ACTIVE COMMITMENTS ({commitments?.length || 0})
-              </h2>
-              <CommitmentList
-                commitments={commitments || []}
-                onDeactivate={handleDeactivate}
-                onRenew={handleRenew}
-              />
+              {/* ACTIVE COMMITMENTS section */}
+              <section>
+                <h2 className="text-sm text-gray-400 mb-4">
+                  ACTIVE COMMITMENTS ({commitments?.length || 0})
+                </h2>
+                <CommitmentList
+                  commitments={commitments || []}
+                  onDeactivate={handleDeactivate}
+                  onRenew={handleRenew}
+                />
+              </section>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Graveyard */}
-      {graveyard && graveyard.length > 0 && (
-        <div className="mt-8">
-          <Graveyard characters={graveyard} />
-        </div>
-      )}
-
-      {/* Game rules */}
-      <footer className="mt-12 pt-6 border-t border-gray-800 text-xs text-gray-600">
-        <div className="grid md:grid-cols-3 gap-4">
-          <div>
-            <p className="text-gray-500 mb-1">HP Drain</p>
-            <p>-0.2 HP/hour per active repo</p>
-            <p>~5 HP/day per repo</p>
+        {/* Graveyard */}
+        {graveyard && graveyard.length > 0 && (
+          <div className="mt-10">
+            <Graveyard characters={graveyard} />
           </div>
-          <div>
-            <p className="text-gray-500 mb-1">Rewards</p>
-            <p>Commit: +3 HP, +10 XP</p>
-            <p>Issue: +8 HP, +25 XP</p>
-            <p>PR: +12 HP, +50 XP</p>
-          </div>
-          <div>
-            <p className="text-gray-500 mb-1">Commitments</p>
-            <p>30-day cycles</p>
-            <p>Early exit: -50 HP</p>
-            <p>HP = 0? Permadeath.</p>
-          </div>
-        </div>
-      </footer>
+        )}
+      </div>
 
       {/* Confirmation Dialog */}
       <ConfirmDialog
@@ -262,6 +250,6 @@ export default function Dashboard() {
         onConfirm={handleConfirmDeactivate}
         onCancel={handleCancelDeactivate}
       />
-    </main>
+    </AppShell>
   );
 }
