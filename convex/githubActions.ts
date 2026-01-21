@@ -21,6 +21,7 @@ export const getUserRepos = action({
     }
 
     // Prefer PAT (private repos access) over Clerk OAuth token (public only)
+    // Both tokens are now encrypted
     let token: string | null = null;
 
     if (user.githubPersonalToken) {
@@ -32,7 +33,11 @@ export const getUserRepos = action({
     }
 
     if (!token && user.githubAccessToken) {
-      token = user.githubAccessToken;
+      try {
+        token = decrypt(user.githubAccessToken);
+      } catch {
+        console.error("Failed to decrypt OAuth token");
+      }
     }
 
     if (!token) {
@@ -67,8 +72,9 @@ export const syncGitHubToken = action({
     // First ensure user exists
     await ctx.runMutation(api.users.getOrCreate);
 
-    // Then update the token
-    await ctx.runMutation(api.users.updateGitHubToken, { token: args.token });
+    // Encrypt and store the token
+    const encryptedToken = encrypt(args.token);
+    await ctx.runMutation(internal.users.updateGitHubToken, { encryptedToken });
 
     // Fetch and return GitHub user info to update profile
     try {

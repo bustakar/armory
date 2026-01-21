@@ -52,7 +52,8 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_active", ["userId", "deactivatedAt"])
-    .index("by_character", ["characterId"]),
+    .index("by_character", ["characterId"])
+    .index("by_active", ["deactivatedAt"]), // For efficient cron queries
 
   // Activity logs - hourly snapshots
   activityLogs: defineTable({

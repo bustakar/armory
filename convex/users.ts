@@ -44,10 +44,10 @@ export const get = query({
   },
 });
 
-// Update GitHub access token
-export const updateGitHubToken = mutation({
+// Update GitHub access token (internal - called from action with encrypted token)
+export const updateGitHubToken = internalMutation({
   args: {
-    token: v.string(),
+    encryptedToken: v.string(),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -61,7 +61,7 @@ export const updateGitHubToken = mutation({
     if (!user) throw new Error("User not found");
 
     await ctx.db.patch(user._id, {
-      githubAccessToken: args.token,
+      githubAccessToken: args.encryptedToken,
     });
   },
 });

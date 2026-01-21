@@ -1,15 +1,36 @@
 import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { clampHp, calculateLevel, Difficulty } from "./game";
+import { Id } from "./_generated/dataModel";
 
 // Get all users with active commitments
+// Optimized: Query active commitments first using index, then fetch related data
 export const getUsersWithActiveCommitments = internalMutation({
   handler: async (ctx) => {
-    const users = await ctx.db.query("users").collect();
+    // Use the new index to get only active commitments (deactivatedAt === undefined)
+    const activeCommitments = await ctx.db
+      .query("commitments")
+      .withIndex("by_active", (q) => q.eq("deactivatedAt", undefined))
+      .collect();
+
+    if (activeCommitments.length === 0) return [];
+
+    // Group commitments by userId
+    const commitmentsByUser = new Map<Id<"users">, typeof activeCommitments>();
+    for (const commitment of activeCommitments) {
+      const userId = commitment.userId;
+      if (!commitmentsByUser.has(userId)) {
+        commitmentsByUser.set(userId, []);
+      }
+      commitmentsByUser.get(userId)!.push(commitment);
+    }
+
     const results = [];
 
-    for (const user of users) {
-      if (!user.githubAccessToken) continue;
+    // Process only users with active commitments
+    for (const [userId, userCommitments] of commitmentsByUser) {
+      const user = await ctx.db.get(userId);
+      if (!user || !user.githubAccessToken) continue;
 
       const character = await ctx.db
         .query("characters")
@@ -19,22 +40,15 @@ export const getUsersWithActiveCommitments = internalMutation({
 
       if (!character) continue;
 
-      const commitments = await ctx.db
-        .query("commitments")
-        .withIndex("by_user_active", (q) =>
-          q.eq("userId", user._id).eq("deactivatedAt", undefined)
-        )
-        .collect();
-
-      if (commitments.length === 0) continue;
-
       results.push({
         userId: user._id,
         characterId: character._id,
         githubUsername: user.githubUsername,
+        // Token is encrypted - will be decrypted in the action
         githubAccessToken: user.githubAccessToken,
+        githubPersonalToken: user.githubPersonalToken,
         difficulty: (character.difficulty || "easy") as Difficulty,
-        commitments: commitments.map((c) => ({
+        commitments: userCommitments.map((c) => ({
           _id: c._id,
           owner: c.owner,
           repo: c.repo,

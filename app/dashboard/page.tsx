@@ -44,7 +44,6 @@ export default function Dashboard() {
   const voluntaryDeath = useMutation(api.scannerMutations.voluntaryDeath);
 
   // Convex actions (server-side GitHub operations)
-  const syncGitHubToken = useAction(api.githubActions.syncGitHubToken);
   const getUserRepos = useAction(api.githubActions.getUserRepos);
 
   // Redirect if not signed in
@@ -61,22 +60,17 @@ export default function Dashboard() {
     }
   }, [clerkUser, user, getOrCreateUser]);
 
-  // Sync GitHub token to Convex (token is passed once, then stored server-side)
+  // Sync GitHub token to Convex (fully server-side - token never reaches client)
   useEffect(() => {
     async function syncToken() {
       if (!clerkUser || !user || tokenSynced) return;
 
       try {
-        // Fetch GitHub token from Clerk via our API route
-        const response = await fetch("/api/github-token");
+        // Server-side endpoint handles: Clerk token fetch -> encrypt -> store in Convex
+        // Token NEVER touches the client
+        const response = await fetch("/api/sync-github", { method: "POST" });
         if (response.ok) {
-          const data = await response.json();
-          if (data.token) {
-            // Pass token to Convex action - it will be stored server-side
-            // Token is NOT stored in React state
-            await syncGitHubToken({ token: data.token });
-            setTokenSynced(true);
-          }
+          setTokenSynced(true);
         }
       } catch {
         console.error("Failed to sync GitHub token");
@@ -84,7 +78,7 @@ export default function Dashboard() {
     }
 
     syncToken();
-  }, [clerkUser, user, tokenSynced, syncGitHubToken]);
+  }, [clerkUser, user, tokenSynced]);
 
   // Fetch repos via Convex action (server-side, no token exposure)
   const loadRepos = useCallback(async () => {

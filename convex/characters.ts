@@ -23,6 +23,30 @@ export const get = query({
   },
 });
 
+// Character name validation constants
+const NAME_MIN_LENGTH = 1;
+const NAME_MAX_LENGTH = 50;
+// Allow alphanumeric, spaces, hyphens, underscores, apostrophes
+const NAME_PATTERN = /^[a-zA-Z0-9\s\-_']+$/;
+
+function validateCharacterName(name: string): string {
+  const trimmed = name.trim();
+
+  if (trimmed.length < NAME_MIN_LENGTH) {
+    throw new Error("Character name cannot be empty");
+  }
+
+  if (trimmed.length > NAME_MAX_LENGTH) {
+    throw new Error(`Character name cannot exceed ${NAME_MAX_LENGTH} characters`);
+  }
+
+  if (!NAME_PATTERN.test(trimmed)) {
+    throw new Error("Character name can only contain letters, numbers, spaces, hyphens, underscores, and apostrophes");
+  }
+
+  return trimmed;
+}
+
 // Create a new character
 export const create = mutation({
   args: {
@@ -32,6 +56,9 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+
+    // Validate and sanitize character name
+    const validatedName = validateCharacterName(args.name);
 
     const user = await ctx.db
       .query("users")
@@ -54,7 +81,7 @@ export const create = mutation({
     const now = Date.now();
     return await ctx.db.insert("characters", {
       userId: user._id,
-      name: args.name,
+      name: validatedName,
       hp: MAX_HP,
       maxHp: MAX_HP,
       xp: 0,

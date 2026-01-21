@@ -10,6 +10,7 @@ import {
   Difficulty,
 } from "./game";
 import { fetchCommits, fetchMergedPRs, fetchPRDetails } from "./github";
+import { decrypt } from "./crypto";
 
 // Main hourly cron job
 export const processHourlyUpdates = internalAction({
@@ -21,7 +22,32 @@ export const processHourlyUpdates = internalAction({
 
     for (const userData of usersWithCommitments) {
       try {
-        await processUserActivity(ctx, userData);
+        // Decrypt token - prefer PAT (private repos) over OAuth (public only)
+        // Both tokens are now encrypted
+        let token: string | null = null;
+
+        if (userData.githubPersonalToken) {
+          try {
+            token = decrypt(userData.githubPersonalToken);
+          } catch {
+            console.error(`Failed to decrypt PAT for user ${userData.userId}`);
+          }
+        }
+
+        if (!token && userData.githubAccessToken) {
+          try {
+            token = decrypt(userData.githubAccessToken);
+          } catch {
+            console.error(`Failed to decrypt OAuth token for user ${userData.userId}`);
+          }
+        }
+
+        if (!token) {
+          console.error(`No valid token for user ${userData.userId}`);
+          continue;
+        }
+
+        await processUserActivity(ctx, { ...userData, decryptedToken: token });
       } catch (error) {
         console.error(`Error processing user ${userData.userId}:`, error);
       }
@@ -44,7 +70,7 @@ async function processUserActivity(
     userId: string;
     characterId: string;
     githubUsername: string;
-    githubAccessToken: string;
+    decryptedToken: string;
     difficulty: Difficulty;
     commitments: Array<{
       _id: string;
@@ -72,14 +98,14 @@ async function processUserActivity(
     // Fetch GitHub activity (commits and PRs only - issues are tracked via PRs)
     const [commits, prs] = await Promise.all([
       fetchCommits(
-        userData.githubAccessToken,
+        userData.decryptedToken,
         commitment.owner,
         commitment.repo,
         userData.githubUsername,
         since
       ),
       fetchMergedPRs(
-        userData.githubAccessToken,
+        userData.decryptedToken,
         commitment.owner,
         commitment.repo,
         userData.githubUsername,
@@ -112,7 +138,7 @@ async function processUserActivity(
     // Fetch PR details to check if they close issues
     for (const pr of prs) {
       const prDetails = await fetchPRDetails(
-        userData.githubAccessToken,
+        userData.decryptedToken,
         commitment.owner,
         commitment.repo,
         pr.number
