@@ -15,6 +15,8 @@ import { useUser, UserButton } from "@clerk/nextjs";
 import { Id } from "../../convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
 
+type Difficulty = "easy" | "medium" | "hard";
+
 export default function Dashboard() {
   const router = useRouter();
   const { user: clerkUser, isLoaded: isClerkLoaded } = useUser();
@@ -25,6 +27,7 @@ export default function Dashboard() {
     isOpen: boolean;
     commitmentId: string | null;
   }>({ isOpen: false, commitmentId: null });
+  const [killCharacterDialog, setKillCharacterDialog] = useState(false);
 
   // Convex queries
   const user = useQuery(api.users.get);
@@ -38,6 +41,7 @@ export default function Dashboard() {
   const activateCommitment = useMutation(api.commitments.activate);
   const deactivateCommitment = useMutation(api.commitments.deactivate);
   const renewCommitment = useMutation(api.commitments.renew);
+  const voluntaryDeath = useMutation(api.scannerMutations.voluntaryDeath);
 
   // Convex actions (server-side GitHub operations)
   const syncGitHubToken = useAction(api.githubActions.syncGitHubToken);
@@ -110,8 +114,8 @@ export default function Dashboard() {
     );
   }
 
-  const handleCreateCharacter = async (name: string) => {
-    await createCharacter({ name });
+  const handleCreateCharacter = async (name: string, difficulty: Difficulty) => {
+    await createCharacter({ name, difficulty });
   };
 
   const handleActivate = async (owner: string, repo: string, isPrivate: boolean) => {
@@ -141,6 +145,19 @@ export default function Dashboard() {
 
   const handleCancelDeactivate = () => {
     setConfirmDialog({ isOpen: false, commitmentId: null });
+  };
+
+  const handleKillCharacter = () => {
+    setKillCharacterDialog(true);
+  };
+
+  const handleConfirmKillCharacter = async () => {
+    await voluntaryDeath();
+    setKillCharacterDialog(false);
+  };
+
+  const handleCancelKillCharacter = () => {
+    setKillCharacterDialog(false);
   };
 
   const handleRenew = async (id: string) => {
@@ -196,6 +213,7 @@ export default function Dashboard() {
                   character={character}
                   activeRepoCount={commitments?.length || 0}
                   avatarUrl={avatarUrl}
+                  onKillCharacter={handleKillCharacter}
                 />
               </section>
 
@@ -239,7 +257,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Confirmation Dialog */}
+      {/* Confirmation Dialog for commitment deactivation */}
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         title="Early Exit Warning"
@@ -249,6 +267,18 @@ export default function Dashboard() {
         variant="danger"
         onConfirm={handleConfirmDeactivate}
         onCancel={handleCancelDeactivate}
+      />
+
+      {/* Confirmation Dialog for killing character */}
+      <ConfirmDialog
+        isOpen={killCharacterDialog}
+        title="End Character"
+        message="Are you sure you want to end this character? This cannot be undone. Your character will be moved to the graveyard."
+        confirmText="End Character"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={handleConfirmKillCharacter}
+        onCancel={handleCancelKillCharacter}
       />
     </AppShell>
   );

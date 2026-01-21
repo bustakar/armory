@@ -9,6 +9,14 @@ import { formatTimeRemaining, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 
+type Difficulty = "easy" | "medium" | "hard";
+
+const DIFFICULTY_COLORS: Record<Difficulty, string> = {
+  easy: "text-green-400 border-green-700 bg-green-900/30",
+  medium: "text-yellow-400 border-yellow-700 bg-yellow-900/30",
+  hard: "text-red-400 border-red-700 bg-red-900/30",
+};
+
 export default function PublicProfile() {
   const params = useParams();
   const username = params.username as string;
@@ -78,9 +86,14 @@ export default function PublicProfile() {
             <div className="pixel-border bg-black p-4 mb-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h2 className="text-lg text-[var(--pixel-gold)]">
-                    {character.name}
-                  </h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg text-[var(--pixel-gold)]">
+                      {character.name}
+                    </h2>
+                    <span className={`text-xs px-2 py-0.5 border ${DIFFICULTY_COLORS[character.difficulty as Difficulty]}`}>
+                      {(character.difficulty || "easy").toUpperCase()}
+                    </span>
+                  </div>
                   <p className="text-xs text-gray-500">
                     Level {character.level} Adventurer
                   </p>
@@ -159,18 +172,26 @@ export default function PublicProfile() {
               GRAVEYARD ({graveyard.length})
             </h3>
             <div className="space-y-2">
-              {graveyard.map((g: { name: string; level: number; deathCause: string; daysLived: number; diedAt: number }, i: number) => (
-                <div key={i} className="pixel-border bg-black p-3 opacity-60">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">{g.name}</span>
-                    <span className="text-xs text-gray-600">Lvl {g.level}</span>
+              {graveyard.map((g: { name: string; level: number; deathCause: string; daysLived: number; diedAt: number; difficulty?: Difficulty }, i: number) => {
+                const diff = g.difficulty || "easy";
+                return (
+                  <div key={i} className="pixel-border bg-black p-3 opacity-60">
+                    <div className="flex justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">{g.name}</span>
+                        <span className={`text-xs ${DIFFICULTY_COLORS[diff].split(' ')[0]}`}>
+                          [{diff.toUpperCase()}]
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-600">Lvl {g.level}</span>
+                    </div>
+                    <p className="text-xs text-red-400 mt-1">{g.deathCause}</p>
+                    <p className="text-xs text-gray-600">
+                      Lived {g.daysLived} days - {formatDate(g.diedAt)}
+                    </p>
                   </div>
-                  <p className="text-xs text-red-400 mt-1">{g.deathCause}</p>
-                  <p className="text-xs text-gray-600">
-                    Lived {g.daysLived} days - {formatDate(g.diedAt)}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

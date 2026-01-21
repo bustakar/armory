@@ -27,6 +27,7 @@ export const get = query({
 export const create = mutation({
   args: {
     name: v.string(),
+    difficulty: v.optional(v.union(v.literal("easy"), v.literal("medium"), v.literal("hard"))),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -62,6 +63,7 @@ export const create = mutation({
       lastHpUpdate: now,
       isAlive: true,
       createdAt: now,
+      difficulty: args.difficulty || "easy",
     });
   },
 });
@@ -112,6 +114,7 @@ export const getPublicProfile = query({
         level: character.level,
         streak: character.streak,
         createdAt: character.createdAt,
+        difficulty: character.difficulty || "easy",
       } : null,
       commitments: commitments.map((c) => ({
         // Hide private repo details from public profile
@@ -129,6 +132,7 @@ export const getPublicProfile = query({
         diedAt: g.diedAt,
         deathCause: g.deathCause,
         daysLived: g.daysLived,
+        difficulty: g.difficulty || "easy",
       })),
     };
   },

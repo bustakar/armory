@@ -3,6 +3,8 @@
 import { HpBar } from "./hp-bar";
 import { XpBar } from "./xp-bar";
 
+type Difficulty = "easy" | "medium" | "hard";
+
 interface Character {
   _id: string;
   name: string;
@@ -12,18 +14,38 @@ interface Character {
   level: number;
   streak: number;
   isAlive: boolean;
+  difficulty?: Difficulty;
 }
 
 interface CharacterCardProps {
   character: Character;
   activeRepoCount: number;
   avatarUrl?: string;
+  onKillCharacter?: () => void;
 }
 
-const HP_DRAIN_PER_REPO_PER_HOUR = 0.2;
+const HP_DRAIN_RATES: Record<Difficulty, number> = {
+  easy: 0.2,
+  medium: 0.5,
+  hard: 1.0,
+};
 
-export function CharacterCard({ character, activeRepoCount, avatarUrl }: CharacterCardProps) {
-  const hourlyDrain = HP_DRAIN_PER_REPO_PER_HOUR * activeRepoCount;
+const XP_MULTIPLIERS: Record<Difficulty, number> = {
+  easy: 1,
+  medium: 2,
+  hard: 3,
+};
+
+const DIFFICULTY_COLORS: Record<Difficulty, string> = {
+  easy: "text-green-400 border-green-700 bg-green-900/30",
+  medium: "text-yellow-400 border-yellow-700 bg-yellow-900/30",
+  hard: "text-red-400 border-red-700 bg-red-900/30",
+};
+
+export function CharacterCard({ character, activeRepoCount, avatarUrl, onKillCharacter }: CharacterCardProps) {
+  const difficulty = character.difficulty || "easy";
+  const hourlyDrain = HP_DRAIN_RATES[difficulty] * activeRepoCount;
+  const xpMultiplier = XP_MULTIPLIERS[difficulty];
 
   return (
     <div className="pixel-border bg-black p-6">
@@ -39,10 +61,18 @@ export function CharacterCard({ character, activeRepoCount, avatarUrl }: Charact
             style={{ imageRendering: "pixelated" }}
           />
         )}
-        <div>
-          <h2 className="text-xl text-[var(--pixel-gold)]">{character.name}</h2>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl text-[var(--pixel-gold)]">{character.name}</h2>
+            <span className={`text-xs px-2 py-0.5 border ${DIFFICULTY_COLORS[difficulty]}`}>
+              {difficulty.toUpperCase()}
+            </span>
+          </div>
           <p className="text-xs text-gray-400">
             Level {character.level} Adventurer
+            {xpMultiplier > 1 && (
+              <span className="text-purple-400 ml-2">({xpMultiplier}x XP)</span>
+            )}
           </p>
         </div>
       </div>
@@ -76,6 +106,18 @@ export function CharacterCard({ character, activeRepoCount, avatarUrl }: Charact
           <p className="text-xs text-gray-500">
             -{(hourlyDrain * 24).toFixed(1)} HP/day
           </p>
+        </div>
+      )}
+
+      {/* Kill character button */}
+      {onKillCharacter && (
+        <div className="mt-4 pt-4 border-t border-gray-700">
+          <button
+            onClick={onKillCharacter}
+            className="w-full text-xs text-gray-500 hover:text-red-400 transition-colors py-2"
+          >
+            End character...
+          </button>
         </div>
       )}
     </div>

@@ -28,6 +28,7 @@ export default defineSchema({
     lastHpUpdate: v.number(), // Timestamp of last HP calculation
     isAlive: v.boolean(),
     createdAt: v.number(),
+    difficulty: v.optional(v.union(v.literal("easy"), v.literal("medium"), v.literal("hard"))), // Defaults to "easy" for existing characters
   }).index("by_user", ["userId"]),
 
   // 30-day commitment cycles
@@ -94,5 +95,6 @@ export default defineSchema({
     totalCommits: v.number(),
     totalIssuesClosed: v.number(),
     totalPrsMerged: v.number(),
+    difficulty: v.optional(v.union(v.literal("easy"), v.literal("medium"), v.literal("hard"))), // Difficulty at time of death
   }).index("by_user", ["userId"]),
 });

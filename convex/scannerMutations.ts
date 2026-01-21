@@ -1,6 +1,6 @@
-import { internalMutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { clampHp, calculateLevel } from "./game";
+import { clampHp, calculateLevel, Difficulty } from "./game";
 
 // Get all users with active commitments
 export const getUsersWithActiveCommitments = internalMutation({
@@ -33,6 +33,7 @@ export const getUsersWithActiveCommitments = internalMutation({
         characterId: character._id,
         githubUsername: user.githubUsername,
         githubAccessToken: user.githubAccessToken,
+        difficulty: (character.difficulty || "easy") as Difficulty,
         commitments: commitments.map((c) => ({
           _id: c._id,
           owner: c.owner,
@@ -176,7 +177,7 @@ export const logActivity = internalMutation({
   },
 });
 
-// Kill character
+// Kill character (internal - called by scanner when HP reaches 0)
 export const killCharacter = internalMutation({
   args: {
     characterId: v.id("characters"),
@@ -217,10 +218,78 @@ export const killCharacter = internalMutation({
       totalCommits,
       totalIssuesClosed,
       totalPrsMerged,
+      difficulty: character.difficulty,
     });
 
     // Mark character as dead
     await ctx.db.patch(args.characterId, {
+      isAlive: false,
+      hp: 0,
+    });
+
+    // Deactivate all commitments
+    for (const commitment of commitments) {
+      if (!commitment.deactivatedAt) {
+        await ctx.db.patch(commitment._id, {
+          deactivatedAt: now,
+          wasEarlyExit: true,
+        });
+      }
+    }
+  },
+});
+
+// Voluntary death - user manually kills their character
+export const voluntaryDeath = mutation({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    const character = await ctx.db
+      .query("characters")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .filter((q) => q.eq(q.field("isAlive"), true))
+      .first();
+
+    if (!character) throw new Error("No living character");
+
+    const now = Date.now();
+    const daysLived = Math.floor((now - character.createdAt) / (24 * 60 * 60 * 1000));
+
+    // Get all commitments for total stats
+    const commitments = await ctx.db
+      .query("commitments")
+      .withIndex("by_character", (q) => q.eq("characterId", character._id))
+      .collect();
+
+    const totalCommits = commitments.reduce((sum, c) => sum + c.totalCommits, 0);
+    const totalIssuesClosed = commitments.reduce((sum, c) => sum + c.totalIssuesClosed, 0);
+    const totalPrsMerged = commitments.reduce((sum, c) => sum + c.totalPrsMerged, 0);
+
+    // Add to graveyard with voluntary death cause
+    await ctx.db.insert("graveyard", {
+      userId: character.userId,
+      name: character.name,
+      level: character.level,
+      xp: character.xp,
+      diedAt: now,
+      deathCause: "Chose to end their journey",
+      daysLived,
+      totalCommits,
+      totalIssuesClosed,
+      totalPrsMerged,
+      difficulty: character.difficulty,
+    });
+
+    // Mark character as dead
+    await ctx.db.patch(character._id, {
       isAlive: false,
       hp: 0,
     });

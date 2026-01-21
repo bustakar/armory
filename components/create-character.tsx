@@ -2,11 +2,37 @@
 
 import { useState } from "react";
 
+type Difficulty = "easy" | "medium" | "hard";
+
 interface CreateCharacterProps {
   githubUsername: string;
-  onSubmit: (name: string) => void;
+  onSubmit: (name: string, difficulty: Difficulty) => void;
   isLoading: boolean;
 }
+
+const DIFFICULTY_INFO: Record<Difficulty, { label: string; color: string; hpDrain: number; xpMultiplier: number; description: string }> = {
+  easy: {
+    label: "Easy",
+    color: "text-green-400",
+    hpDrain: 0.2,
+    xpMultiplier: 1,
+    description: "1 PR/day total survives 3 repos",
+  },
+  medium: {
+    label: "Medium",
+    color: "text-yellow-400",
+    hpDrain: 0.5,
+    xpMultiplier: 2,
+    description: "1 PR/day per repo survives 3 repos",
+  },
+  hard: {
+    label: "Hard",
+    color: "text-red-400",
+    hpDrain: 1.0,
+    xpMultiplier: 3,
+    description: "2 PRs/day per repo survives 3 repos",
+  },
+};
 
 export function CreateCharacter({
   githubUsername,
@@ -14,13 +40,16 @@ export function CreateCharacter({
   isLoading,
 }: CreateCharacterProps) {
   const [name, setName] = useState(githubUsername);
+  const [difficulty, setDifficulty] = useState<Difficulty>("easy");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
-      onSubmit(name.trim());
+      onSubmit(name.trim(), difficulty);
     }
   };
+
+  const currentDifficulty = DIFFICULTY_INFO[difficulty];
 
   return (
     <div className="pixel-border bg-black p-8 max-w-md mx-auto text-center">
@@ -29,7 +58,7 @@ export function CreateCharacter({
       </h1>
 
       <p className="text-sm text-gray-400 mb-6">
-        Welcome, brave developer! Choose a name for your character.
+        Welcome, brave developer! Choose a name and difficulty for your character.
       </p>
 
       <form onSubmit={handleSubmit}>
@@ -41,6 +70,43 @@ export function CreateCharacter({
           className="w-full bg-gray-900 border-2 border-gray-600 p-3 text-center text-[var(--pixel-green)] mb-4"
           placeholder="Character name"
         />
+
+        {/* Difficulty selector */}
+        <div className="mb-4">
+          <label className="block text-xs text-gray-400 mb-2">DIFFICULTY</label>
+          <div className="flex gap-2">
+            {(Object.keys(DIFFICULTY_INFO) as Difficulty[]).map((d) => {
+              const info = DIFFICULTY_INFO[d];
+              const isSelected = difficulty === d;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDifficulty(d)}
+                  className={`flex-1 py-2 border-2 transition-colors ${
+                    isSelected
+                      ? `${info.color} border-current bg-gray-900`
+                      : "text-gray-500 border-gray-700 hover:border-gray-500"
+                  }`}
+                >
+                  {info.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Difficulty info */}
+        <div className="mb-6 p-3 bg-gray-900 border border-gray-700 text-left">
+          <div className="flex justify-between items-center mb-2">
+            <span className={`text-sm ${currentDifficulty.color}`}>{currentDifficulty.label}</span>
+            <span className="text-xs text-purple-400">{currentDifficulty.xpMultiplier}x XP</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">{currentDifficulty.description}</p>
+          <div className="text-xs text-red-400">
+            -{currentDifficulty.hpDrain} HP/hour per repo ({(currentDifficulty.hpDrain * 24).toFixed(0)} HP/day)
+          </div>
+        </div>
 
         <button
           type="submit"

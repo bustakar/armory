@@ -3,11 +3,13 @@
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
-  HP_DRAIN_PER_REPO_PER_HOUR,
+  HP_DRAIN_RATES,
+  XP_MULTIPLIERS,
   REWARDS,
   getTodayString,
+  Difficulty,
 } from "./game";
-import { fetchCommits, fetchClosedIssues, fetchMergedPRs } from "./github";
+import { fetchCommits, fetchMergedPRs, fetchPRDetails } from "./github";
 
 // Main hourly cron job
 export const processHourlyUpdates = internalAction({
@@ -27,6 +29,14 @@ export const processHourlyUpdates = internalAction({
   },
 });
 
+// Check if PR body indicates it closes issues
+function prClosesIssues(prBody: string | null): boolean {
+  if (!prBody) return false;
+  // Match patterns like: closes #123, fixes #456, resolves #789
+  const closingKeywords = /\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\d+/i;
+  return closingKeywords.test(prBody);
+}
+
 // Process a single user's activity
 async function processUserActivity(
   ctx: any,
@@ -35,6 +45,7 @@ async function processUserActivity(
     characterId: string;
     githubUsername: string;
     githubAccessToken: string;
+    difficulty: Difficulty;
     commitments: Array<{
       _id: string;
       owner: string;
@@ -48,23 +59,19 @@ async function processUserActivity(
   let totalHpGain = 0;
   let totalXpGain = 0;
 
-  // Calculate HP drain based on active repo count
-  const hpDrain = HP_DRAIN_PER_REPO_PER_HOUR * userData.commitments.length;
+  const difficulty = userData.difficulty || "easy";
+  const xpMultiplier = XP_MULTIPLIERS[difficulty];
+
+  // Calculate HP drain based on active repo count and difficulty
+  const hpDrain = HP_DRAIN_RATES[difficulty] * userData.commitments.length;
 
   // Process each commitment
   for (const commitment of userData.commitments) {
     const since = new Date(commitment.lastScannedAt || now - 60 * 60 * 1000);
 
-    // Fetch GitHub activity
-    const [commits, issues, prs] = await Promise.all([
+    // Fetch GitHub activity (commits and PRs only - issues are tracked via PRs)
+    const [commits, prs] = await Promise.all([
       fetchCommits(
-        userData.githubAccessToken,
-        commitment.owner,
-        commitment.repo,
-        userData.githubUsername,
-        since
-      ),
-      fetchClosedIssues(
         userData.githubAccessToken,
         commitment.owner,
         commitment.repo,
@@ -94,28 +101,44 @@ async function processUserActivity(
       commits.length,
       REWARDS.commit.dailyCap - (dailyActivity?.commits || 0)
     );
-    const cappedIssues = Math.min(
-      issues.length,
-      REWARDS.issueClosed.dailyCap - (dailyActivity?.issuesClosed || 0)
-    );
 
-    const commitHp = cappedCommits * REWARDS.commit.hp;
-    const commitXp = cappedCommits * REWARDS.commit.xp;
-    const issueHp = cappedIssues * REWARDS.issueClosed.hp;
-    const issueXp = cappedIssues * REWARDS.issueClosed.xp;
-    const prHp = prs.length * REWARDS.prMerged.hp;
-    const prXp = prs.length * REWARDS.prMerged.xp;
+    // Commits: XP only, no HP
+    const commitXp = cappedCommits * REWARDS.commit.xp * xpMultiplier;
 
-    totalHpGain += commitHp + issueHp + prHp;
-    totalXpGain += commitXp + issueXp + prXp;
+    // PRs: Source of HP, higher reward if PR closes issues
+    let prHp = 0;
+    let prXp = 0;
+
+    // Fetch PR details to check if they close issues
+    for (const pr of prs) {
+      const prDetails = await fetchPRDetails(
+        userData.githubAccessToken,
+        commitment.owner,
+        commitment.repo,
+        pr.number
+      );
+
+      if (prClosesIssues(prDetails?.body ?? null)) {
+        // PR closes issues: higher reward
+        prHp += REWARDS.prMergedWithIssue.hp;
+        prXp += REWARDS.prMergedWithIssue.xp * xpMultiplier;
+      } else {
+        // PR without issues: lower reward
+        prHp += REWARDS.prMergedNoIssue.hp;
+        prXp += REWARDS.prMergedNoIssue.xp * xpMultiplier;
+      }
+    }
+
+    totalHpGain += prHp;
+    totalXpGain += commitXp + prXp;
 
     // Update commitment stats
     await ctx.runMutation(internal.scannerMutations.updateCommitmentStats, {
       commitmentId: commitment._id,
       commits: commits.length,
-      issuesClosed: issues.length,
+      issuesClosed: 0, // No longer tracking issues separately
       prsMerged: prs.length,
-      xpEarned: commitXp + issueXp + prXp,
+      xpEarned: commitXp + prXp,
       lastScannedAt: now,
     });
 
@@ -125,7 +148,7 @@ async function processUserActivity(
       commitmentId: commitment._id,
       date: today,
       commits: cappedCommits,
-      issuesClosed: cappedIssues,
+      issuesClosed: 0, // No longer tracking issues separately
     });
   }
 

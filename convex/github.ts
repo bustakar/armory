@@ -31,6 +31,12 @@ export interface GitHubPullRequest {
   user: {
     login: string;
   };
+  body?: string | null;
+}
+
+export interface GitHubPRDetails {
+  number: number;
+  body: string | null;
 }
 
 export interface GitHubUser {
@@ -172,4 +178,33 @@ export async function fetchUserRepos(
   }
 
   return response.json();
+}
+
+// Fetch PR details (body content for issue linking detection)
+export async function fetchPRDetails(
+  token: string,
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<GitHubPRDetails | null> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(`GitHub API error: ${response.status}`);
+  }
+
+  const pr = await response.json();
+  return {
+    number: pr.number,
+    body: pr.body,
+  };
 }
