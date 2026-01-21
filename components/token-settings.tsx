@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
+import { ConfirmDialog } from "./confirm-dialog";
 
 export function TokenSettings() {
   const hasToken = useQuery(api.users.hasPersonalToken);
@@ -13,6 +14,7 @@ export function TokenSettings() {
   const [token, setToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   const handleSave = async () => {
     if (!token.trim()) return;
@@ -38,10 +40,11 @@ export function TokenSettings() {
   };
 
   const handleRemove = async () => {
-    if (!confirm("Remove personal access token? You'll only see public repos.")) {
-      return;
-    }
+    setShowRemoveConfirm(true);
+  };
 
+  const handleConfirmRemove = async () => {
+    setShowRemoveConfirm(false);
     setIsLoading(true);
     try {
       await removeToken();
@@ -114,10 +117,11 @@ export function TokenSettings() {
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="ghp_xxxxxxxxxxxx"
+                aria-label="GitHub personal access token"
                 className="w-full bg-gray-900 border border-gray-600 p-2 text-sm text-green-400 placeholder-gray-600"
               />
               {error && (
-                <p className="text-xs text-red-400">{error}</p>
+                <p className="text-xs text-red-400" role="alert">{error}</p>
               )}
               <div className="flex gap-2">
                 <button
@@ -142,6 +146,17 @@ export function TokenSettings() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={showRemoveConfirm}
+        title="Remove Token"
+        message="Remove personal access token? You'll only see public repos."
+        confirmText="Remove"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={handleConfirmRemove}
+        onCancel={() => setShowRemoveConfirm(false)}
+      />
     </div>
   );
 }

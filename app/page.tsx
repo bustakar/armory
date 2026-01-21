@@ -9,7 +9,7 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8">
+    <main id="main" className="min-h-screen flex flex-col items-center justify-center p-8">
       <div className="pixel-border bg-black p-8 max-w-lg text-center">
         <h1 className="text-2xl text-[var(--pixel-gold)] mb-6">ARMORY</h1>
         <p className="text-sm text-gray-400 mb-2">Developer Survival Game</p>

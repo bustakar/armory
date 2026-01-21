@@ -9,6 +9,7 @@ import { RepoSelector } from "@/components/repo-selector";
 import { CreateCharacter } from "@/components/create-character";
 import { Graveyard } from "@/components/graveyard";
 import { TokenSettings } from "@/components/token-settings";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { Id } from "../../convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,10 @@ export default function Dashboard() {
   const [repos, setRepos] = useState<Array<{ owner: string; name: string; fullName: string; isPrivate: boolean }>>([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
   const [tokenSynced, setTokenSynced] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    commitmentId: string | null;
+  }>({ isOpen: false, commitmentId: null });
 
   // Convex queries
   const user = useQuery(api.users.get);
@@ -118,11 +123,23 @@ export default function Dashboard() {
     const isEarlyExit = commitment && now < commitment.commitmentEndsAt;
 
     if (isEarlyExit) {
-      if (!confirm("Are you sure? Early exit costs 50 HP!")) {
-        return;
-      }
+      setConfirmDialog({ isOpen: true, commitmentId: id });
+      return;
     }
     await deactivateCommitment({ commitmentId: id as Id<"commitments"> });
+  };
+
+  const handleConfirmDeactivate = async () => {
+    if (confirmDialog.commitmentId) {
+      await deactivateCommitment({
+        commitmentId: confirmDialog.commitmentId as Id<"commitments">,
+      });
+    }
+    setConfirmDialog({ isOpen: false, commitmentId: null });
+  };
+
+  const handleCancelDeactivate = () => {
+    setConfirmDialog({ isOpen: false, commitmentId: null });
   };
 
   const handleRenew = async (id: string) => {
@@ -145,7 +162,7 @@ export default function Dashboard() {
   }));
 
   return (
-    <main className="min-h-screen p-4 max-w-4xl mx-auto">
+    <main id="main" className="min-h-screen p-4 max-w-4xl mx-auto">
       {/* Header */}
       <header className="flex justify-between items-center mb-8 pb-4 border-b border-gray-700">
         <h1 className="text-xl text-[var(--pixel-gold)]">ARMORY</h1>
@@ -233,6 +250,18 @@ export default function Dashboard() {
           </div>
         </div>
       </footer>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title="Early Exit Warning"
+        message="Are you sure? Early exit costs 50 HP!"
+        confirmText="Exit (-50 HP)"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={handleConfirmDeactivate}
+        onCancel={handleCancelDeactivate}
+      />
     </main>
   );
 }

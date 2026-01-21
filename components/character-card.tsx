@@ -34,6 +34,7 @@ export function CharacterCard({ character, activeRepoCount, avatarUrl }: Charact
           <img
             src={avatarUrl}
             alt={character.name}
+            loading="lazy"
             className="w-16 h-16 border-2 border-gray-600"
             style={{ imageRendering: "pixelated" }}
           />

@@ -74,3 +74,36 @@ body {
   );
   pointer-events: none;
 }
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .hp-danger {
+    animation: none;
+  }
+
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Touch optimization */
+button,
+a,
+input,
+select {
+  touch-action: manipulation;
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
