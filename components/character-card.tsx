@@ -30,6 +30,7 @@ export function CharacterCard({ character, activeRepoCount, avatarUrl }: Charact
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         {avatarUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={avatarUrl}
             alt={character.name}

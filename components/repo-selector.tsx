@@ -6,12 +6,13 @@ interface Repo {
   owner: { login: string };
   name: string;
   full_name: string;
+  isPrivate?: boolean;
 }
 
 interface RepoSelectorProps {
   repos: Repo[];
   activeRepoNames: string[];
-  onActivate: (owner: string, repo: string) => void;
+  onActivate: (owner: string, repo: string, isPrivate: boolean) => void;
   isLoading: boolean;
 }
 
@@ -61,7 +62,7 @@ export function RepoSelector({
                 <button
                   key={repo.full_name}
                   onClick={() => {
-                    onActivate(repo.owner.login, repo.name);
+                    onActivate(repo.owner.login, repo.name, repo.isPrivate ?? false);
                     setIsOpen(false);
                     setSearch("");
                   }}

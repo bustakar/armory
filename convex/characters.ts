@@ -2,59 +2,24 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { MAX_HP } from "./game";
 
-// Helper to get user from session token
-async function getUserFromSession(ctx: any, sessionToken: string) {
-  try {
-    const jsonString = atob(sessionToken);
-    const decoded = JSON.parse(jsonString);
-    return await ctx.db
-      .query("users")
-      .withIndex("by_github_id", (q: any) => q.eq("githubId", String(decoded.githubId)))
-      .first();
-  } catch {
-    return null;
-  }
-}
-
 // Get current user's character
 export const get = query({
-  args: {
-    sessionToken: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (!args.sessionToken) return null;
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
-    const user = await getUserFromSession(ctx, args.sessionToken);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
     if (!user) return null;
 
-    const character = await ctx.db
+    return await ctx.db
       .query("characters")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .filter((q) => q.eq(q.field("isAlive"), true))
       .first();
-
-    return character;
-  },
-});
-
-// Get user with character
-export const getUserWithCharacter = query({
-  args: {
-    sessionToken: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (!args.sessionToken) return null;
-
-    const user = await getUserFromSession(ctx, args.sessionToken);
-    if (!user) return null;
-
-    const character = await ctx.db
-      .query("characters")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .filter((q) => q.eq(q.field("isAlive"), true))
-      .first();
-
-    return { user, character };
   },
 });
 
@@ -62,11 +27,17 @@ export const getUserWithCharacter = query({
 export const create = mutation({
   args: {
     name: v.string(),
-    sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await getUserFromSession(ctx, args.sessionToken);
-    if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
 
     // Check if user already has a living character
     const existingCharacter = await ctx.db
@@ -103,7 +74,7 @@ export const getPublicProfile = query({
   handler: async (ctx, args) => {
     const user = await ctx.db
       .query("users")
-      .filter((q) => q.eq(q.field("githubUsername"), args.username))
+      .withIndex("by_github_username", (q) => q.eq("githubUsername", args.username))
       .first();
 
     if (!user) return null;
@@ -143,8 +114,10 @@ export const getPublicProfile = query({
         createdAt: character.createdAt,
       } : null,
       commitments: commitments.map((c) => ({
-        owner: c.owner,
-        repo: c.repo,
+        // Hide private repo details from public profile
+        owner: c.isPrivate ? null : c.owner,
+        repo: c.isPrivate ? null : c.repo,
+        isPrivate: c.isPrivate ?? false,
         activatedAt: c.activatedAt,
         commitmentEndsAt: c.commitmentEndsAt,
         renewalCount: c.renewalCount,
@@ -163,13 +136,15 @@ export const getPublicProfile = query({
 
 // Get graveyard for current user
 export const getGraveyard = query({
-  args: {
-    sessionToken: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (!args.sessionToken) return [];
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
-    const user = await getUserFromSession(ctx, args.sessionToken);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
     if (!user) return [];
 
     return await ctx.db

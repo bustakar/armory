@@ -2,14 +2,18 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // Users with GitHub connection
+  // Users - stores GitHub tokens
   users: defineTable({
-    githubId: v.string(),
+    clerkId: v.string(),
     githubUsername: v.string(),
-    githubAccessToken: v.string(),
+    // Clerk OAuth token (public repos only)
+    githubAccessToken: v.optional(v.string()),
+    // User-provided PAT for private repos (encrypted)
+    githubPersonalToken: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_github_id", ["githubId"]),
+  }).index("by_clerk_id", ["clerkId"])
+    .index("by_github_username", ["githubUsername"]),
 
   // Character state - one active character per user
   characters: defineTable({
@@ -32,6 +36,7 @@ export default defineSchema({
     characterId: v.id("characters"),
     owner: v.string(), // GitHub owner
     repo: v.string(), // GitHub repo
+    isPrivate: v.optional(v.boolean()), // Whether repo is private (hidden in public profile)
     activatedAt: v.number(), // Timestamp
     commitmentEndsAt: v.number(), // activatedAt + 30 days
     deactivatedAt: v.optional(v.number()), // Set when commitment ends

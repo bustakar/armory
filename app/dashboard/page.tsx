@@ -1,92 +1,102 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useEffect, useState, useCallback } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { CharacterCard } from "@/components/character-card";
 import { CommitmentList } from "@/components/commitment-list";
 import { RepoSelector } from "@/components/repo-selector";
 import { CreateCharacter } from "@/components/create-character";
 import { Graveyard } from "@/components/graveyard";
-import { getSessionToken, clearSession } from "@/lib/utils";
+import { TokenSettings } from "@/components/token-settings";
+import { useUser, UserButton } from "@clerk/nextjs";
+import { Id } from "../../convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
 
 export default function Dashboard() {
   const router = useRouter();
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [repos, setRepos] = useState<any[]>([]);
+  const { user: clerkUser, isLoaded: isClerkLoaded } = useUser();
+  const [repos, setRepos] = useState<Array<{ owner: string; name: string; fullName: string; isPrivate: boolean }>>([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
-  const [userCreated, setUserCreated] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [tokenSynced, setTokenSynced] = useState(false);
 
-  // Get session token on mount
-  useEffect(() => {
-    const token = getSessionToken();
-    console.log("[Dashboard] Cookie check:", {
-      token: token ? `${token.substring(0, 20)}...` : null,
-      allCookies: document.cookie
-    });
-    if (!token) {
-      console.log("[Dashboard] No token found, redirecting to /");
-      router.push("/");
-      return;
-    }
-    setSessionToken(token);
-    setIsInitialized(true);
-  }, [router]);
+  // Convex queries
+  const user = useQuery(api.users.get);
+  const character = useQuery(api.characters.get);
+  const commitments = useQuery(api.commitments.getActive);
+  const graveyard = useQuery(api.characters.getGraveyard);
 
-  // Queries - pass sessionToken to all
-  const user = useQuery(api.users.getBySession, sessionToken ? { sessionToken } : "skip");
-  const character = useQuery(api.characters.get, sessionToken ? { sessionToken } : "skip");
-  const commitments = useQuery(api.commitments.getActive, sessionToken ? { sessionToken } : "skip");
-  const graveyard = useQuery(api.characters.getGraveyard, sessionToken ? { sessionToken } : "skip");
-
-  // Mutations
-  const upsertUser = useMutation(api.users.upsertFromSession);
+  // Convex mutations
+  const getOrCreateUser = useMutation(api.users.getOrCreate);
   const createCharacter = useMutation(api.characters.create);
   const activateCommitment = useMutation(api.commitments.activate);
   const deactivateCommitment = useMutation(api.commitments.deactivate);
   const renewCommitment = useMutation(api.commitments.renew);
 
-  // Create user in DB if needed
-  useEffect(() => {
-    if (user && "needsCreation" in user && user.needsCreation && sessionToken && !userCreated) {
-      setUserCreated(true);
-      upsertUser({ sessionToken }).catch(console.error);
-    }
-  }, [user, sessionToken, upsertUser, userCreated]);
+  // Convex actions (server-side GitHub operations)
+  const syncGitHubToken = useAction(api.githubActions.syncGitHubToken);
+  const getUserRepos = useAction(api.githubActions.getUserRepos);
 
-  // Redirect if no user found (after query completes)
+  // Redirect if not signed in
   useEffect(() => {
-    console.log("[Dashboard] User query state:", { isInitialized, user });
-    if (isInitialized && user === null) {
-      console.log("[Dashboard] User query returned null, redirecting to /");
+    if (isClerkLoaded && !clerkUser) {
       router.push("/");
     }
-  }, [isInitialized, user, router]);
+  }, [isClerkLoaded, clerkUser, router]);
 
-  // Fetch repos when user is loaded
+  // Create user in Convex DB when signed in
   useEffect(() => {
-    if (user && user.githubAccessToken && sessionToken) {
-      setIsLoadingRepos(true);
-      fetch(
-        `https://api.github.com/user/repos?per_page=100&sort=updated`,
-        {
-          headers: {
-            Authorization: `Bearer ${user.githubAccessToken}`,
-            Accept: "application/vnd.github+json",
-          },
-        }
-      )
-        .then((res) => res.json())
-        .then((data) => setRepos(Array.isArray(data) ? data : []))
-        .catch(console.error)
-        .finally(() => setIsLoadingRepos(false));
+    if (clerkUser && user === null) {
+      getOrCreateUser();
     }
-  }, [user, sessionToken]);
+  }, [clerkUser, user, getOrCreateUser]);
+
+  // Sync GitHub token to Convex (token is passed once, then stored server-side)
+  useEffect(() => {
+    async function syncToken() {
+      if (!clerkUser || !user || tokenSynced) return;
+
+      try {
+        // Fetch GitHub token from Clerk via our API route
+        const response = await fetch("/api/github-token");
+        if (response.ok) {
+          const data = await response.json();
+          if (data.token) {
+            // Pass token to Convex action - it will be stored server-side
+            // Token is NOT stored in React state
+            await syncGitHubToken({ token: data.token });
+            setTokenSynced(true);
+          }
+        }
+      } catch {
+        console.error("Failed to sync GitHub token");
+      }
+    }
+
+    syncToken();
+  }, [clerkUser, user, tokenSynced, syncGitHubToken]);
+
+  // Fetch repos via Convex action (server-side, no token exposure)
+  const loadRepos = useCallback(async () => {
+    if (!tokenSynced) return;
+
+    setIsLoadingRepos(true);
+    try {
+      const repoList = await getUserRepos();
+      setRepos(repoList);
+    } catch {
+      console.error("Failed to fetch repos");
+    } finally {
+      setIsLoadingRepos(false);
+    }
+  }, [tokenSynced, getUserRepos]);
+
+  useEffect(() => {
+    loadRepos();
+  }, [loadRepos]);
 
   // Loading state
-  if (!isInitialized || !sessionToken || user === undefined || user === null) {
+  if (!isClerkLoaded || !clerkUser || user === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-[var(--pixel-green)]">Loading...</p>
@@ -94,25 +104,17 @@ export default function Dashboard() {
     );
   }
 
-  const handleLogout = () => {
-    clearSession();
-    router.push("/");
-  };
-
   const handleCreateCharacter = async (name: string) => {
-    if (!sessionToken) return;
-    await createCharacter({ name, sessionToken });
+    await createCharacter({ name });
   };
 
-  const handleActivate = async (owner: string, repo: string) => {
-    if (!sessionToken) return;
-    await activateCommitment({ owner, repo, sessionToken });
+  const handleActivate = async (owner: string, repo: string, isPrivate: boolean) => {
+    await activateCommitment({ owner, repo, isPrivate });
   };
 
   const handleDeactivate = async (id: string) => {
-    if (!sessionToken) return;
     const now = Date.now();
-    const commitment = commitments?.find((c) => c._id === id);
+    const commitment = commitments?.find((c: { _id: string; commitmentEndsAt: number }) => c._id === id);
     const isEarlyExit = commitment && now < commitment.commitmentEndsAt;
 
     if (isEarlyExit) {
@@ -120,17 +122,27 @@ export default function Dashboard() {
         return;
       }
     }
-    await deactivateCommitment({ commitmentId: id as any, sessionToken });
+    await deactivateCommitment({ commitmentId: id as Id<"commitments"> });
   };
 
   const handleRenew = async (id: string) => {
-    if (!sessionToken) return;
-    await renewCommitment({ commitmentId: id as any, sessionToken });
+    await renewCommitment({ commitmentId: id as Id<"commitments"> });
   };
 
   const activeRepoNames = (commitments || []).map(
-    (c) => `${c.owner}/${c.repo}`
+    (c: { owner: string; repo: string }) => `${c.owner}/${c.repo}`
   );
+
+  const githubUsername = user?.githubUsername || clerkUser.username || "user";
+  const avatarUrl = user?.avatarUrl || clerkUser.imageUrl;
+
+  // Transform repos for RepoSelector component
+  const reposForSelector = repos.map((r) => ({
+    owner: { login: r.owner },
+    name: r.name,
+    full_name: r.fullName,
+    isPrivate: r.isPrivate,
+  }));
 
   return (
     <main className="min-h-screen p-4 max-w-4xl mx-auto">
@@ -139,25 +151,20 @@ export default function Dashboard() {
         <h1 className="text-xl text-[var(--pixel-gold)]">ARMORY</h1>
         <div className="flex items-center gap-4">
           <a
-            href={`/u/${user.githubUsername}`}
+            href={`/u/${githubUsername}`}
             className="text-sm text-[var(--pixel-green)] hover:underline"
             title="View public profile"
           >
-            @{user.githubUsername}
+            @{githubUsername}
           </a>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-gray-500 hover:text-gray-300"
-          >
-            Logout
-          </button>
+          <UserButton afterSignOutUrl="/" />
         </div>
       </header>
 
       {/* No character - show creation form */}
       {!character ? (
         <CreateCharacter
-          githubUsername={user.githubUsername}
+          githubUsername={githubUsername}
           onSubmit={handleCreateCharacter}
           isLoading={false}
         />
@@ -168,15 +175,17 @@ export default function Dashboard() {
             <CharacterCard
               character={character}
               activeRepoCount={commitments?.length || 0}
-              avatarUrl={user.avatarUrl}
+              avatarUrl={avatarUrl}
             />
 
             <RepoSelector
-              repos={repos}
+              repos={reposForSelector}
               activeRepoNames={activeRepoNames}
               onActivate={handleActivate}
               isLoading={isLoadingRepos}
             />
+
+            <TokenSettings />
           </div>
 
           {/* Right column - Commitments */}

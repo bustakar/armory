@@ -40,22 +40,3 @@ export function getHpTextColor(hp: number, maxHp: number): string {
   if (percentage > 30) return "text-yellow-400";
   return "text-red-400";
 }
-
-export function getSessionToken(): string | null {
-  if (typeof window === "undefined") return null;
-
-  // Read from cookie
-  const cookies = document.cookie.split(";");
-  for (const cookie of cookies) {
-    const [name, ...rest] = cookie.trim().split("=");
-    if (name === "armory_session") {
-      return rest.join("="); // Handle base64 with = padding
-    }
-  }
-
-  return null;
-}
-
-export function clearSession(): void {
-  document.cookie = "armory_session=; path=/; max-age=0";
-}

@@ -9,6 +9,8 @@ export const getUsersWithActiveCommitments = internalMutation({
     const results = [];
 
     for (const user of users) {
+      if (!user.githubAccessToken) continue;
+
       const character = await ctx.db
         .query("characters")
         .withIndex("by_user", (q) => q.eq("userId", user._id))

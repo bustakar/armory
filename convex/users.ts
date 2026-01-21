@@ -1,84 +1,154 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
-// Get current user by session token
-export const getBySession = query({
-  args: {
-    sessionToken: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (!args.sessionToken) {
-      console.log("[getBySession] No session token provided");
-      return null;
-    }
+// Get or create user from Clerk auth
+export const getOrCreate = mutation({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
-    try {
-      // Decode base64 token - use atob for browser compatibility
-      const jsonString = atob(args.sessionToken);
-      console.log("[getBySession] Decoded token:", jsonString);
-      const decoded = JSON.parse(jsonString);
+    // Check if user exists
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
 
-      // First check if user exists in DB
-      let user = await ctx.db
-        .query("users")
-        .withIndex("by_github_id", (q) => q.eq("githubId", String(decoded.githubId)))
-        .first();
+    if (existing) return existing;
 
-      // If not, return the session data so frontend can create user
-      if (!user) {
-        return {
-          _id: null,
-          githubId: decoded.githubId,
-          githubUsername: decoded.githubUsername,
-          githubAccessToken: decoded.accessToken,
-          avatarUrl: decoded.avatarUrl,
-          needsCreation: true,
-        };
-      }
+    // Create new user
+    // Extract GitHub username from identity (Clerk provides this when using GitHub OAuth)
+    const githubUsername = identity.nickname || identity.name || "unknown";
+    const avatarUrl = identity.pictureUrl || undefined;
 
-      return user;
-    } catch (error) {
-      console.error("[getBySession] Error:", error);
-      return null;
-    }
+    const userId = await ctx.db.insert("users", {
+      clerkId: identity.subject,
+      githubUsername,
+      avatarUrl,
+      createdAt: Date.now(),
+    });
+
+    return await ctx.db.get(userId);
   },
 });
 
-// Create or update user from session
-export const upsertFromSession = mutation({
+// Get current user
+export const get = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    return await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+  },
+});
+
+// Update GitHub access token
+export const updateGitHubToken = mutation({
   args: {
-    sessionToken: v.string(),
+    token: v.string(),
   },
   handler: async (ctx, args) => {
-    try {
-      const jsonString = atob(args.sessionToken);
-      const decoded = JSON.parse(jsonString);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
-      const existing = await ctx.db
-        .query("users")
-        .withIndex("by_github_id", (q) => q.eq("githubId", String(decoded.githubId)))
-        .first();
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
 
-      if (existing) {
-        // Update existing user with fresh token
-        await ctx.db.patch(existing._id, {
-          githubUsername: decoded.githubUsername,
-          githubAccessToken: decoded.accessToken,
-          avatarUrl: decoded.avatarUrl,
-        });
-        return existing._id;
-      }
+    if (!user) throw new Error("User not found");
 
-      // Create new user
-      return await ctx.db.insert("users", {
-        githubId: String(decoded.githubId),
-        githubUsername: decoded.githubUsername,
-        githubAccessToken: decoded.accessToken,
-        avatarUrl: decoded.avatarUrl,
-        createdAt: Date.now(),
-      });
-    } catch (error) {
-      throw new Error("Invalid session token");
-    }
+    await ctx.db.patch(user._id, {
+      githubAccessToken: args.token,
+    });
+  },
+});
+
+// Get user by GitHub username (for public profiles)
+export const getByUsername = query({
+  args: {
+    username: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("users")
+      .withIndex("by_github_username", (q) => q.eq("githubUsername", args.username))
+      .first();
+  },
+});
+
+// Internal: Get user with token (for server-side GitHub API calls)
+export const getWithToken = internalQuery({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    return await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+  },
+});
+
+// Update user profile (GitHub username and avatar)
+export const updateProfile = mutation({
+  args: {
+    githubUsername: v.string(),
+    avatarUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    await ctx.db.patch(user._id, {
+      githubUsername: args.githubUsername,
+      avatarUrl: args.avatarUrl,
+    });
+  },
+});
+
+// Internal: Update personal access token (encrypted)
+export const updatePersonalToken = internalMutation({
+  args: {
+    encryptedToken: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    await ctx.db.patch(user._id, {
+      githubPersonalToken: args.encryptedToken ?? undefined,
+    });
+  },
+});
+
+// Check if user has personal access token configured
+export const hasPersonalToken = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return false;
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    return !!user?.githubPersonalToken;
   },
 });

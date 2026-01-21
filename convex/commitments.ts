@@ -8,29 +8,17 @@ import {
   clampHp,
 } from "./game";
 
-// Helper to get user from session token
-async function getUserFromSession(ctx: any, sessionToken: string) {
-  try {
-    const jsonString = atob(sessionToken);
-    const decoded = JSON.parse(jsonString);
-    return await ctx.db
-      .query("users")
-      .withIndex("by_github_id", (q: any) => q.eq("githubId", String(decoded.githubId)))
-      .first();
-  } catch {
-    return null;
-  }
-}
-
 // Get active commitments for current user
 export const getActive = query({
-  args: {
-    sessionToken: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (!args.sessionToken) return [];
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
-    const user = await getUserFromSession(ctx, args.sessionToken);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
     if (!user) return [];
 
     // Get active (non-deactivated) commitments
@@ -45,13 +33,15 @@ export const getActive = query({
 
 // Get all commitments for current user (including history)
 export const getAll = query({
-  args: {
-    sessionToken: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    if (!args.sessionToken) return [];
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
-    const user = await getUserFromSession(ctx, args.sessionToken);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
     if (!user) return [];
 
     return await ctx.db
@@ -64,13 +54,20 @@ export const getAll = query({
 // Activate a repo commitment
 export const activate = mutation({
   args: {
-    sessionToken: v.string(),
     owner: v.string(),
     repo: v.string(),
+    isPrivate: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await getUserFromSession(ctx, args.sessionToken);
-    if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
 
     // Get user's living character
     const character = await ctx.db
@@ -78,6 +75,7 @@ export const activate = mutation({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .filter((q) => q.eq(q.field("isAlive"), true))
       .first();
+
     if (!character) throw new Error("No living character. Create one first.");
 
     // Check if already has active commitment for this repo
@@ -104,6 +102,7 @@ export const activate = mutation({
       characterId: character._id,
       owner: args.owner,
       repo: args.repo,
+      isPrivate: args.isPrivate,
       activatedAt: now,
       commitmentEndsAt: now + daysToMs(COMMITMENT_DAYS),
       renewalCount: 0,
@@ -118,12 +117,18 @@ export const activate = mutation({
 // Deactivate a commitment (early exit or completion)
 export const deactivate = mutation({
   args: {
-    sessionToken: v.string(),
     commitmentId: v.id("commitments"),
   },
   handler: async (ctx, args) => {
-    const user = await getUserFromSession(ctx, args.sessionToken);
-    if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
 
     const commitment = await ctx.db.get(args.commitmentId);
     if (!commitment) throw new Error("Commitment not found");
@@ -176,12 +181,18 @@ export const deactivate = mutation({
 // Renew a commitment for another 30 days
 export const renew = mutation({
   args: {
-    sessionToken: v.string(),
     commitmentId: v.id("commitments"),
   },
   handler: async (ctx, args) => {
-    const user = await getUserFromSession(ctx, args.sessionToken);
-    if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
 
     const commitment = await ctx.db.get(args.commitmentId);
     if (!commitment) throw new Error("Commitment not found");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
 import { useParams } from "next/navigation";
 import { HpBar } from "@/components/hp-bar";
 import { XpBar } from "@/components/xp-bar";
@@ -55,6 +55,7 @@ export default function PublicProfile() {
       {/* Player info */}
       <div className="flex items-center gap-4 mb-6">
         {user.avatarUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={user.avatarUrl}
             alt={user.githubUsername}
@@ -73,7 +74,7 @@ export default function PublicProfile() {
       {!character ? (
         <div className="pixel-border bg-black p-6 text-center">
           <p className="text-gray-400">
-            This player hasn't created a character yet.
+            This player hasn&apos;t created a character yet.
           </p>
         </div>
       ) : (
@@ -100,22 +101,12 @@ export default function PublicProfile() {
 
             {/* HP Bar */}
             <div className="mb-3">
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-red-400">HP</span>
-                <span className="text-gray-400">
-                  {Math.round(character.hp)}/{character.maxHp}
-                </span>
-              </div>
               <HpBar hp={character.hp} maxHp={character.maxHp} />
             </div>
 
             {/* XP Bar */}
             <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-blue-400">XP</span>
-                <span className="text-gray-400">{character.xp} total</span>
-              </div>
-              <XpBar xp={character.xp} />
+              <XpBar xp={character.xp} level={character.level} />
             </div>
 
             <p className="text-xs text-gray-600 mt-3">
@@ -132,17 +123,23 @@ export default function PublicProfile() {
               <p className="text-xs text-gray-600">No active commitments</p>
             ) : (
               <div className="space-y-2">
-                {commitments.map((c, i) => (
+                {commitments.map((c: { owner: string | null; repo: string | null; isPrivate: boolean; commitmentEndsAt: number; renewalCount: number }, i: number) => (
                   <div key={i} className="pixel-border bg-black p-3">
                     <div className="flex justify-between items-center">
-                      <a
-                        href={`https://github.com/${c.owner}/${c.repo}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[var(--pixel-green)] hover:underline text-sm"
-                      >
-                        {c.owner}/{c.repo}
-                      </a>
+                      {c.isPrivate ? (
+                        <span className="text-gray-500 text-sm">
+                          •••/secret-project 🔒
+                        </span>
+                      ) : (
+                        <a
+                          href={`https://github.com/${c.owner}/${c.repo}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[var(--pixel-green)] hover:underline text-sm"
+                        >
+                          {c.owner}/{c.repo}
+                        </a>
+                      )}
                       <span className="text-xs text-gray-500">
                         {formatTimeRemaining(c.commitmentEndsAt)}
                       </span>
@@ -167,7 +164,7 @@ export default function PublicProfile() {
             GRAVEYARD ({graveyard.length})
           </h3>
           <div className="space-y-2">
-            {graveyard.map((g, i) => (
+            {graveyard.map((g: { name: string; level: number; deathCause: string; daysLived: number; diedAt: number }, i: number) => (
               <div key={i} className="pixel-border bg-black p-3 opacity-60">
                 <div className="flex justify-between">
                   <span className="text-gray-400">{g.name}</span>

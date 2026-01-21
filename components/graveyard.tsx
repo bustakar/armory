@@ -46,7 +46,7 @@ export function Graveyard({ characters }: GraveyardProps) {
               </p>
             </div>
             <p className="text-xs text-red-400 mt-2 italic">
-              "{char.deathCause}"
+              &quot;{char.deathCause}&quot;
             </p>
             <div className="flex gap-4 mt-2 text-xs text-gray-600">
               <span>{char.daysLived} days</span>

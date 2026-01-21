@@ -155,41 +155,10 @@ export async function fetchGitHubUser(token: string): Promise<GitHubUser> {
   return response.json();
 }
 
-// Exchange OAuth code for access token
-export async function exchangeCodeForToken(
-  code: string,
-  clientId: string,
-  clientSecret: string
-): Promise<string> {
-  const response = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub OAuth error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  if (data.error) {
-    throw new Error(`GitHub OAuth error: ${data.error_description}`);
-  }
-
-  return data.access_token;
-}
-
 // Fetch user's repos
 export async function fetchUserRepos(
   token: string
-): Promise<Array<{ owner: { login: string }; name: string; full_name: string }>> {
+): Promise<Array<{ owner: { login: string }; name: string; full_name: string; private: boolean }>> {
   const response = await fetch("https://api.github.com/user/repos?per_page=100&sort=updated", {
     headers: {
       Authorization: `Bearer ${token}`,
