@@ -11,6 +11,7 @@ import { Graveyard } from "@/components/graveyard";
 import { TokenSettings } from "@/components/token-settings";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppShell } from "@/components/app-shell";
+import { useToast } from "@/components/toast";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { Id } from "../../convex/_generated/dataModel";
 import { useRouter } from "next/navigation";
@@ -19,9 +20,11 @@ type Difficulty = "easy" | "medium" | "hard";
 
 export default function Dashboard() {
   const router = useRouter();
+  const { showError, showSuccess } = useToast();
   const { user: clerkUser, isLoaded: isClerkLoaded } = useUser();
   const [repos, setRepos] = useState<Array<{ owner: string; name: string; fullName: string; isPrivate: boolean }>>([]);
   const [isLoadingRepos, setIsLoadingRepos] = useState(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
   const [tokenSynced, setTokenSynced] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
@@ -56,9 +59,12 @@ export default function Dashboard() {
   // Create user in Convex DB when signed in
   useEffect(() => {
     if (clerkUser && user === null) {
-      getOrCreateUser();
+      getOrCreateUser().catch((error) => {
+        console.error("Failed to create user:", error);
+        showError("Failed to initialize account. Please refresh.");
+      });
     }
-  }, [clerkUser, user, getOrCreateUser]);
+  }, [clerkUser, user, getOrCreateUser, showError]);
 
   // Sync GitHub token to Convex (fully server-side - token never reaches client)
   useEffect(() => {
@@ -71,9 +77,19 @@ export default function Dashboard() {
         const response = await fetch("/api/sync-github", { method: "POST" });
         if (response.ok) {
           setTokenSynced(true);
+        } else {
+          // Handle specific error cases
+          const data = await response.json().catch(() => ({}));
+          if (response.status === 404 && data.category === "github") {
+            // No GitHub token - user may need to reconnect GitHub
+            console.warn("No GitHub token found - user may need to reconnect");
+          } else if (response.status !== 401) {
+            // Don't show error for auth issues on initial load
+            console.error("Token sync failed:", data.error || response.statusText);
+          }
         }
-      } catch {
-        console.error("Failed to sync GitHub token");
+      } catch (error) {
+        console.error("Failed to sync GitHub token:", error);
       }
     }
 
@@ -85,15 +101,29 @@ export default function Dashboard() {
     if (!tokenSynced) return;
 
     setIsLoadingRepos(true);
+    setRepoError(null);
+
     try {
-      const repoList = await getUserRepos();
-      setRepos(repoList);
-    } catch {
-      console.error("Failed to fetch repos");
+      const result = await getUserRepos();
+      if (result.success && result.data) {
+        setRepos(result.data);
+      } else if (result.error) {
+        setRepoError(result.error.message);
+        if (result.error.category === "RATE_LIMIT") {
+          showError("GitHub rate limit exceeded. Please try again later.");
+        } else if (result.error.category !== "AUTH") {
+          // Don't show auth errors as toasts - they're expected for new users
+          showError(result.error.message);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch repos:", error);
+      setRepoError("Failed to load repositories");
+      showError("Failed to load repositories. Please try again.");
     } finally {
       setIsLoadingRepos(false);
     }
-  }, [tokenSynced, getUserRepos]);
+  }, [tokenSynced, getUserRepos, showError]);
 
   useEffect(() => {
     loadRepos();
@@ -109,11 +139,25 @@ export default function Dashboard() {
   }
 
   const handleCreateCharacter = async (name: string, difficulty: Difficulty) => {
-    await createCharacter({ name, difficulty });
+    try {
+      await createCharacter({ name, difficulty });
+      showSuccess("Character created!");
+    } catch (error) {
+      console.error("Failed to create character:", error);
+      const message = error instanceof Error ? error.message : "Failed to create character";
+      showError(message);
+    }
   };
 
   const handleActivate = async (owner: string, repo: string, isPrivate: boolean) => {
-    await activateCommitment({ owner, repo, isPrivate });
+    try {
+      await activateCommitment({ owner, repo, isPrivate });
+      showSuccess(`Committed to ${owner}/${repo}`);
+    } catch (error) {
+      console.error("Failed to activate commitment:", error);
+      const message = error instanceof Error ? error.message : "Failed to activate commitment";
+      showError(message);
+    }
   };
 
   const handleDeactivate = async (id: string) => {
@@ -125,14 +169,29 @@ export default function Dashboard() {
       setConfirmDialog({ isOpen: true, commitmentId: id });
       return;
     }
-    await deactivateCommitment({ commitmentId: id as Id<"commitments"> });
+
+    try {
+      await deactivateCommitment({ commitmentId: id as Id<"commitments"> });
+      showSuccess("Commitment ended");
+    } catch (error) {
+      console.error("Failed to deactivate commitment:", error);
+      const message = error instanceof Error ? error.message : "Failed to end commitment";
+      showError(message);
+    }
   };
 
   const handleConfirmDeactivate = async () => {
     if (confirmDialog.commitmentId) {
-      await deactivateCommitment({
-        commitmentId: confirmDialog.commitmentId as Id<"commitments">,
-      });
+      try {
+        await deactivateCommitment({
+          commitmentId: confirmDialog.commitmentId as Id<"commitments">,
+        });
+        showSuccess("Commitment ended (early exit penalty applied)");
+      } catch (error) {
+        console.error("Failed to deactivate commitment:", error);
+        const message = error instanceof Error ? error.message : "Failed to end commitment";
+        showError(message);
+      }
     }
     setConfirmDialog({ isOpen: false, commitmentId: null });
   };
@@ -146,7 +205,14 @@ export default function Dashboard() {
   };
 
   const handleConfirmKillCharacter = async () => {
-    await voluntaryDeath();
+    try {
+      await voluntaryDeath();
+      showSuccess("Character laid to rest");
+    } catch (error) {
+      console.error("Failed to end character:", error);
+      const message = error instanceof Error ? error.message : "Failed to end character";
+      showError(message);
+    }
     setKillCharacterDialog(false);
   };
 
@@ -155,7 +221,14 @@ export default function Dashboard() {
   };
 
   const handleRenew = async (id: string) => {
-    await renewCommitment({ commitmentId: id as Id<"commitments"> });
+    try {
+      await renewCommitment({ commitmentId: id as Id<"commitments"> });
+      showSuccess("Commitment renewed!");
+    } catch (error) {
+      console.error("Failed to renew commitment:", error);
+      const message = error instanceof Error ? error.message : "Failed to renew commitment";
+      showError(message);
+    }
   };
 
   const activeRepoNames = (commitments || []).map(
@@ -220,6 +293,8 @@ export default function Dashboard() {
                     activeRepoNames={activeRepoNames}
                     onActivate={handleActivate}
                     isLoading={isLoadingRepos}
+                    error={repoError}
+                    onRetry={loadRepos}
                   />
                   <TokenSettings />
                 </div>

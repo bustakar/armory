@@ -110,7 +110,7 @@ export function PublicProfileContent({ username }: { username: string }) {
               </div>
 
               {/* XP Bar */}
-              <div role="meter" aria-label="XP">
+              <div>
                 <XpBar xp={character.xp} level={character.level} />
               </div>
 

@@ -1,7 +1,8 @@
 "use node";
 
-import { internalAction } from "./_generated/server";
+import { internalAction, ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import {
   HP_DRAIN_RATES,
   XP_MULTIPLIERS,
@@ -9,49 +10,115 @@ import {
   getTodayString,
   Difficulty,
 } from "./game";
-import { fetchCommits, fetchMergedPRs, fetchPRDetails } from "./github";
+import { fetchCommits, fetchMergedPRs, fetchPRDetails, GitHubAPIError } from "./github";
 import { decrypt } from "./crypto";
+import { logError, getErrorMessage } from "./lib/errors";
+
+// Track processing stats for observability
+interface ProcessingStats {
+  usersProcessed: number;
+  usersWithErrors: number;
+  rateLimitErrors: number;
+  cryptoErrors: number;
+  networkErrors: number;
+}
 
 // Main hourly cron job
 export const processHourlyUpdates = internalAction({
   handler: async (ctx) => {
+    const stats: ProcessingStats = {
+      usersProcessed: 0,
+      usersWithErrors: 0,
+      rateLimitErrors: 0,
+      cryptoErrors: 0,
+      networkErrors: 0,
+    };
+
     // Get all users with active commitments
     const usersWithCommitments = await ctx.runMutation(
       internal.scannerMutations.getUsersWithActiveCommitments
     );
 
     for (const userData of usersWithCommitments) {
+      stats.usersProcessed++;
+
       try {
         // Decrypt token - prefer PAT (private repos) over OAuth (public only)
         // Both tokens are now encrypted
         let token: string | null = null;
+        let tokenSource: "PAT" | "OAuth" | null = null;
 
         if (userData.githubPersonalToken) {
           try {
             token = decrypt(userData.githubPersonalToken);
-          } catch {
-            console.error(`Failed to decrypt PAT for user ${userData.userId}`);
+            tokenSource = "PAT";
+          } catch (error) {
+            stats.cryptoErrors++;
+            logError("scanner:decryptPAT", error, {
+              userId: userData.userId,
+              characterId: userData.characterId,
+            });
           }
         }
 
         if (!token && userData.githubAccessToken) {
           try {
             token = decrypt(userData.githubAccessToken);
-          } catch {
-            console.error(`Failed to decrypt OAuth token for user ${userData.userId}`);
+            tokenSource = "OAuth";
+          } catch (error) {
+            stats.cryptoErrors++;
+            logError("scanner:decryptOAuth", error, {
+              userId: userData.userId,
+              characterId: userData.characterId,
+            });
           }
         }
 
         if (!token) {
-          console.error(`No valid token for user ${userData.userId}`);
+          stats.usersWithErrors++;
+          console.warn(`[scanner] No valid token for user ${userData.userId}, skipping`);
           continue;
         }
 
-        await processUserActivity(ctx, { ...userData, decryptedToken: token });
+        await processUserActivity(ctx, { ...userData, decryptedToken: token, tokenSource });
       } catch (error) {
-        console.error(`Error processing user ${userData.userId}:`, error);
+        stats.usersWithErrors++;
+
+        // Classify the error for better observability
+        if (error instanceof GitHubAPIError) {
+          if (error.isRateLimit) {
+            stats.rateLimitErrors++;
+            logError("scanner:processUser:rateLimit", error, {
+              userId: userData.userId,
+              characterId: userData.characterId,
+            });
+          } else {
+            logError("scanner:processUser:github", error, {
+              userId: userData.userId,
+              characterId: userData.characterId,
+              status: error.status,
+            });
+          }
+        } else {
+          const errorMessage = getErrorMessage(error);
+          if (errorMessage.includes("network") || errorMessage.includes("timeout")) {
+            stats.networkErrors++;
+          }
+          logError("scanner:processUser", error, {
+            userId: userData.userId,
+            characterId: userData.characterId,
+          });
+        }
       }
     }
+
+    // Log summary stats for observability
+    console.log(`[scanner] Processing complete:`, {
+      ...stats,
+      successRate: stats.usersProcessed > 0
+        ? ((stats.usersProcessed - stats.usersWithErrors) / stats.usersProcessed * 100).toFixed(1) + "%"
+        : "N/A",
+    });
   },
 });
 
@@ -65,15 +132,16 @@ function prClosesIssues(prBody: string | null): boolean {
 
 // Process a single user's activity
 async function processUserActivity(
-  ctx: any,
+  ctx: ActionCtx,
   userData: {
-    userId: string;
-    characterId: string;
+    userId: Id<"users">;
+    characterId: Id<"characters">;
     githubUsername: string;
     decryptedToken: string;
+    tokenSource: "PAT" | "OAuth" | null;
     difficulty: Difficulty;
     commitments: Array<{
-      _id: string;
+      _id: Id<"commitments">;
       owner: string;
       repo: string;
       lastScannedAt?: number;
@@ -95,87 +163,100 @@ async function processUserActivity(
   for (const commitment of userData.commitments) {
     const since = new Date(commitment.lastScannedAt || now - 60 * 60 * 1000);
 
-    // Fetch GitHub activity (commits and PRs only - issues are tracked via PRs)
-    const [commits, prs] = await Promise.all([
-      fetchCommits(
-        userData.decryptedToken,
-        commitment.owner,
-        commitment.repo,
-        userData.githubUsername,
-        since
-      ),
-      fetchMergedPRs(
-        userData.decryptedToken,
-        commitment.owner,
-        commitment.repo,
-        userData.githubUsername,
-        since
-      ),
-    ]);
+    try {
+      // Fetch GitHub activity (commits and PRs only - issues are tracked via PRs)
+      const [commits, prs] = await Promise.all([
+        fetchCommits(
+          userData.decryptedToken,
+          commitment.owner,
+          commitment.repo,
+          userData.githubUsername,
+          since
+        ),
+        fetchMergedPRs(
+          userData.decryptedToken,
+          commitment.owner,
+          commitment.repo,
+          userData.githubUsername,
+          since
+        ),
+      ]);
 
-    // Get daily caps
-    const dailyActivity = await ctx.runMutation(
-      internal.scannerMutations.getDailyActivity,
-      {
-        commitmentId: commitment._id,
-        date: today,
-      }
-    );
-
-    // Calculate rewards with daily caps
-    const cappedCommits = Math.min(
-      commits.length,
-      REWARDS.commit.dailyCap - (dailyActivity?.commits || 0)
-    );
-
-    // Commits: XP only, no HP
-    const commitXp = cappedCommits * REWARDS.commit.xp * xpMultiplier;
-
-    // PRs: Source of HP, higher reward if PR closes issues
-    let prHp = 0;
-    let prXp = 0;
-
-    // Fetch PR details to check if they close issues
-    for (const pr of prs) {
-      const prDetails = await fetchPRDetails(
-        userData.decryptedToken,
-        commitment.owner,
-        commitment.repo,
-        pr.number
+      // Get daily caps
+      const dailyActivity = await ctx.runMutation(
+        internal.scannerMutations.getDailyActivity,
+        {
+          commitmentId: commitment._id,
+          date: today,
+        }
       );
 
-      if (prClosesIssues(prDetails?.body ?? null)) {
-        // PR closes issues: higher reward
-        prHp += REWARDS.prMergedWithIssue.hp;
-        prXp += REWARDS.prMergedWithIssue.xp * xpMultiplier;
-      } else {
-        // PR without issues: lower reward
-        prHp += REWARDS.prMergedNoIssue.hp;
-        prXp += REWARDS.prMergedNoIssue.xp * xpMultiplier;
+      // Calculate rewards with daily caps
+      const cappedCommits = Math.min(
+        commits.length,
+        REWARDS.commit.dailyCap - (dailyActivity?.commits || 0)
+      );
+
+      // Commits: XP only, no HP
+      const commitXp = cappedCommits * REWARDS.commit.xp * xpMultiplier;
+
+      // PRs: Source of HP, higher reward if PR closes issues
+      let prHp = 0;
+      let prXp = 0;
+
+      // Fetch PR details to check if they close issues
+      for (const pr of prs) {
+        const prDetails = await fetchPRDetails(
+          userData.decryptedToken,
+          commitment.owner,
+          commitment.repo,
+          pr.number
+        );
+
+        if (prClosesIssues(prDetails?.body ?? null)) {
+          // PR closes issues: higher reward
+          prHp += REWARDS.prMergedWithIssue.hp;
+          prXp += REWARDS.prMergedWithIssue.xp * xpMultiplier;
+        } else {
+          // PR without issues: lower reward
+          prHp += REWARDS.prMergedNoIssue.hp;
+          prXp += REWARDS.prMergedNoIssue.xp * xpMultiplier;
+        }
+      }
+
+      totalHpGain += prHp;
+      totalXpGain += commitXp + prXp;
+
+      // Update commitment stats
+      await ctx.runMutation(internal.scannerMutations.updateCommitmentStats, {
+        commitmentId: commitment._id,
+        commits: commits.length,
+        issuesClosed: 0, // No longer tracking issues separately
+        prsMerged: prs.length,
+        xpEarned: commitXp + prXp,
+        lastScannedAt: now,
+      });
+
+      // Update daily activity tracking
+      await ctx.runMutation(internal.scannerMutations.updateDailyActivity, {
+        userId: userData.userId,
+        commitmentId: commitment._id,
+        date: today,
+        commits: cappedCommits,
+        issuesClosed: 0, // No longer tracking issues separately
+      });
+    } catch (error) {
+      // Log error but continue processing other commitments
+      logError("scanner:processCommitment", error, {
+        userId: userData.userId,
+        commitmentId: commitment._id,
+        repo: `${commitment.owner}/${commitment.repo}`,
+      });
+      // Re-throw rate limit errors to stop processing this user
+      if (error instanceof GitHubAPIError && error.isRateLimit) {
+        throw error;
       }
     }
-
-    totalHpGain += prHp;
-    totalXpGain += commitXp + prXp;
-
-    // Update commitment stats
-    await ctx.runMutation(internal.scannerMutations.updateCommitmentStats, {
-      commitmentId: commitment._id,
-      commits: commits.length,
-      issuesClosed: 0, // No longer tracking issues separately
-      prsMerged: prs.length,
-      xpEarned: commitXp + prXp,
-      lastScannedAt: now,
-    });
-
-    // Update daily activity tracking
-    await ctx.runMutation(internal.scannerMutations.updateDailyActivity, {
-      userId: userData.userId,
-      commitmentId: commitment._id,
-      date: today,
-      commits: cappedCommits,
-      issuesClosed: 0, // No longer tracking issues separately
-    });
   }
 
   // Calculate net HP change

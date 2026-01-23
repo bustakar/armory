@@ -14,6 +14,8 @@ interface RepoSelectorProps {
   activeRepoNames: string[];
   onActivate: (owner: string, repo: string, isPrivate: boolean) => void;
   isLoading: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 export function RepoSelector({
@@ -21,6 +23,8 @@ export function RepoSelector({
   activeRepoNames,
   onActivate,
   isLoading,
+  error,
+  onRetry,
 }: RepoSelectorProps) {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -56,13 +60,29 @@ export function RepoSelector({
         + Add Commitment
       </h3>
 
+      {error ? (
+        <div className="bg-red-900/30 border border-red-500/50 p-3 mb-2">
+          <p className="text-xs text-red-400 mb-2">{error}</p>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              disabled={isLoading}
+              className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+            >
+              {isLoading ? "Retrying..." : "Try again"}
+            </button>
+          )}
+        </div>
+      ) : null}
+
       <button
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-controls="repo-dropdown"
-        className="w-full bg-gray-800 border border-gray-600 p-2 text-left text-sm hover:bg-gray-700 transition-colors"
+        disabled={!!error}
+        className="w-full bg-gray-800 border border-gray-600 p-2 text-left text-sm hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isOpen ? "Close" : "Select a repository…"}
+        {isLoading ? "Loading..." : isOpen ? "Close" : "Select a repository…"}
       </button>
 
       {isOpen && (

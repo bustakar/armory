@@ -19,7 +19,14 @@ export function XpBar({ xp, level }: XpBarProps) {
           {xpInCurrentLevel} / {XP_PER_LEVEL} XP
         </span>
       </div>
-      <div className="h-4 bg-gray-800 border-2 border-gray-600 relative overflow-hidden">
+      <div
+        role="meter"
+        aria-label="XP progress"
+        aria-valuenow={xpInCurrentLevel}
+        aria-valuemin={0}
+        aria-valuemax={XP_PER_LEVEL}
+        className="h-4 bg-gray-800 border-2 border-gray-600 relative overflow-hidden"
+      >
         <div
           className="h-full bg-purple-600 transition-all duration-300"
           style={{ width: `${percentage}%` }}
