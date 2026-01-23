@@ -25,9 +25,9 @@ interface CharacterCardProps {
 }
 
 const HP_DRAIN_RATES: Record<Difficulty, number> = {
-  easy: 0.2,
-  medium: 0.5,
-  hard: 1.0,
+  easy: 0.5,
+  medium: 1.5,
+  hard: 4.0,
 };
 
 const XP_MULTIPLIERS: Record<Difficulty, number> = {
