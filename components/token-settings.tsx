@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { ConfirmDialog } from "./confirm-dialog";
+import { useToast } from "./toast";
 
 export function TokenSettings() {
+  const { showError, showSuccess } = useToast();
   const hasToken = useQuery(api.users.hasPersonalToken);
   const saveToken = useAction(api.githubActions.savePersonalToken);
   const removeToken = useAction(api.githubActions.removePersonalToken);
@@ -27,13 +29,21 @@ export function TokenSettings() {
       if (result.success) {
         setToken("");
         setIsOpen(false);
+        showSuccess("Token saved! Reloading to fetch private repos...");
         // Reload to refresh repo list with private repos
-        window.location.reload();
-      } else {
-        setError(result.error || "Failed to save token");
+        setTimeout(() => window.location.reload(), 500);
+      } else if (result.error) {
+        setError(result.error.message);
+        // Show toast for rate limit errors
+        if (result.error.category === "RATE_LIMIT") {
+          showError(result.error.message);
+        }
       }
-    } catch {
-      setError("Failed to save token");
+    } catch (err) {
+      console.error("Failed to save token:", err);
+      const message = err instanceof Error ? err.message : "Failed to save token";
+      setError(message);
+      showError(message);
     } finally {
       setIsLoading(false);
     }
@@ -47,8 +57,17 @@ export function TokenSettings() {
     setShowRemoveConfirm(false);
     setIsLoading(true);
     try {
-      await removeToken();
-      window.location.reload();
+      const result = await removeToken();
+      if (result.success) {
+        showSuccess("Token removed");
+        window.location.reload();
+      } else if (result.error) {
+        showError(result.error.message);
+      }
+    } catch (err) {
+      console.error("Failed to remove token:", err);
+      const message = err instanceof Error ? err.message : "Failed to remove token";
+      showError(message);
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +148,7 @@ export function TokenSettings() {
                   disabled={isLoading || !token.trim()}
                   className="bg-green-700 text-white px-3 py-1 text-xs hover:bg-green-600 disabled:opacity-50"
                 >
-                  {isLoading ? "Saving..." : "Save"}
+                  {isLoading ? "Validating..." : "Save"}
                 </button>
                 <button
                   onClick={() => {

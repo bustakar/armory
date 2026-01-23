@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatTimeRemaining } from "@/lib/utils";
 
 interface Commitment {
@@ -25,6 +26,10 @@ export function CommitmentList({
   onDeactivate,
   onRenew,
 }: CommitmentListProps) {
+  // Get current time once per render cycle (must be before any early returns)
+  // eslint-disable-next-line react-hooks/purity -- Date.now() is needed for progress calculation
+  const now = useMemo(() => Date.now(), []);
+
   if (commitments.length === 0) {
     return (
       <div className="pixel-border bg-black p-6 text-center">
@@ -39,7 +44,6 @@ export function CommitmentList({
   return (
     <div className="space-y-4">
       {commitments.map((commitment) => {
-        const now = Date.now();
         const isComplete = now >= commitment.commitmentEndsAt;
         const progress =
           ((now - commitment.activatedAt) /

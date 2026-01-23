@@ -3,6 +3,7 @@ import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ToastProvider } from "@/components/toast";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.dev";
 
@@ -168,7 +169,9 @@ export default function RootLayout({
         </a>
         <ClerkProvider dynamic>
           <ConvexClientProvider>
-            <ErrorBoundary>{children}</ErrorBoundary>
+            <ToastProvider>
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </ToastProvider>
           </ConvexClientProvider>
         </ClerkProvider>
       </body>
