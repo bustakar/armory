@@ -1,211 +1,164 @@
-"use client";
-
-import { useQuery } from "convex/react";
+import type { Metadata } from "next";
+import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../convex/_generated/api";
-import { useParams } from "next/navigation";
-import { HpBar } from "@/components/hp-bar";
-import { XpBar } from "@/components/xp-bar";
-import { formatTimeRemaining, formatDate } from "@/lib/utils";
-import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
+import { PublicProfileContent } from "./content";
 
-type Difficulty = "easy" | "medium" | "hard";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.dev";
 
-const DIFFICULTY_COLORS: Record<Difficulty, string> = {
-  easy: "text-green-400 border-green-700 bg-green-900/30",
-  medium: "text-yellow-400 border-yellow-700 bg-yellow-900/30",
-  hard: "text-red-400 border-red-700 bg-red-900/30",
-};
+// Generate dynamic metadata for profile pages
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ username: string }>;
+}): Promise<Metadata> {
+  const { username } = await params;
 
-export default function PublicProfile() {
-  const params = useParams();
-  const username = params.username as string;
+  try {
+    const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+    const profile = await convex.query(api.characters.getPublicProfile, { username });
 
-  const profile = useQuery(api.characters.getPublicProfile, { username });
+    if (!profile) {
+      return {
+        title: "Player Not Found",
+        description: `No adventurer named @${username} exists in the Armory.`,
+        robots: { index: false, follow: false },
+      };
+    }
 
-  if (profile === undefined) {
-    return (
-      <AppShell>
-        <p className="text-[var(--pixel-green)]">Loading...</p>
-      </AppShell>
-    );
+    const { user, character } = profile;
+    const characterInfo = character
+      ? `Level ${character.level} ${character.difficulty?.toUpperCase() || "EASY"} - ${Math.round(character.hp)}/${character.maxHp} HP`
+      : "No active character";
+
+    const title = `@${user.githubUsername}'s Profile`;
+    const description = character
+      ? `${character.name} - ${characterInfo}. ${character.streak > 0 ? `${character.streak} day streak!` : ""} View their adventure in Armory.`
+      : `@${user.githubUsername} hasn't started their adventure yet. View their profile in Armory.`;
+
+    return {
+      title,
+      description,
+      alternates: {
+        canonical: `${siteUrl}/u/${username}`,
+      },
+      openGraph: {
+        type: "profile",
+        title: `${user.githubUsername} | Armory`,
+        description,
+        url: `${siteUrl}/u/${username}`,
+        siteName: "Armory",
+        images: [
+          {
+            url: user.avatarUrl || `${siteUrl}/og-image.png`,
+            width: 200,
+            height: 200,
+            alt: `${user.githubUsername}'s avatar`,
+          },
+        ],
+        username: user.githubUsername,
+      },
+      twitter: {
+        card: "summary",
+        title: `@${user.githubUsername} | Armory`,
+        description,
+        images: [user.avatarUrl || `${siteUrl}/og-image.png`],
+      },
+    };
+  } catch (error) {
+    console.error("Error generating metadata:", error);
+    return {
+      title: `@${username}'s Profile`,
+      description: "View this player's profile on Armory.",
+    };
   }
+}
 
-  if (profile === null) {
-    return (
-      <AppShell>
-        <div className="pixel-border bg-black p-8 max-w-md text-center">
-          <h1 className="text-xl text-red-400 mb-4">Player Not Found</h1>
-          <p className="text-gray-400 mb-6">
-            No adventurer named @{username} exists in the Armory.
-          </p>
-          <Link
-            href="/"
-            className="inline-block bg-gray-700 text-white px-6 py-2 hover:bg-gray-600"
-          >
-            Return Home
-          </Link>
-        </div>
-      </AppShell>
-    );
-  }
-
-  const { user, character, commitments, graveyard } = profile;
+// JSON-LD structured data component
+function ProfileJsonLd({
+  username,
+  avatarUrl,
+  character,
+}: {
+  username: string;
+  avatarUrl?: string;
+  character?: {
+    name: string;
+    level: number;
+    hp: number;
+    maxHp: number;
+    streak: number;
+    createdAt: number;
+  } | null;
+}) {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "ProfilePage",
+    mainEntity: {
+      "@type": "Person",
+      name: username,
+      alternateName: character?.name,
+      image: avatarUrl,
+      url: `${siteUrl}/u/${username}`,
+      sameAs: [`https://github.com/${username}`],
+    },
+    ...(character && {
+      dateCreated: new Date(character.createdAt).toISOString(),
+    }),
+  };
 
   return (
-    <AppShell centered={false}>
-      <div className="w-full max-w-2xl">
-        {/* Player info */}
-        <div className="flex items-center gap-4 mb-6">
-          {user.avatarUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={user.avatarUrl}
-              alt={user.githubUsername}
-              className="w-16 h-16 pixel-border"
-            />
-          )}
-          <div>
-            <h1 className="text-lg text-[var(--pixel-green)]">
-              @{user.githubUsername}
-            </h1>
-            <p className="text-xs text-gray-500">Public Profile</p>
-          </div>
-        </div>
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    />
+  );
+}
 
-        {/* No character */}
-        {!character ? (
-          <div className="pixel-border bg-black p-6 text-center">
-            <p className="text-gray-400">
-              This player hasn&apos;t created a character yet.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Character card */}
-            <div className="pixel-border bg-black p-4 mb-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-lg text-[var(--pixel-gold)]">
-                      {character.name}
-                    </h2>
-                    <span className={`text-xs px-2 py-0.5 border ${DIFFICULTY_COLORS[character.difficulty as Difficulty]}`}>
-                      {(character.difficulty || "easy").toUpperCase()}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Level {character.level} Adventurer
-                  </p>
-                </div>
-                {character.streak > 0 && (
-                  <div className="text-right">
-                    <p className="text-[var(--pixel-gold)] text-sm">
-                      {character.streak} day streak
-                    </p>
-                  </div>
-                )}
-              </div>
+export default async function PublicProfile({
+  params,
+}: {
+  params: Promise<{ username: string }>;
+}) {
+  const { username } = await params;
 
-              {/* HP Bar */}
-              <div className="mb-3">
-                <HpBar hp={character.hp} maxHp={character.maxHp} />
-              </div>
+  // Pre-fetch profile data for JSON-LD
+  let profileData: {
+    username: string;
+    avatarUrl?: string;
+    character?: {
+      name: string;
+      level: number;
+      hp: number;
+      maxHp: number;
+      streak: number;
+      createdAt: number;
+    } | null;
+  } | null = null;
 
-              {/* XP Bar */}
-              <div>
-                <XpBar xp={character.xp} level={character.level} />
-              </div>
+  try {
+    const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+    const profile = await convex.query(api.characters.getPublicProfile, { username });
+    if (profile) {
+      profileData = {
+        username: profile.user.githubUsername,
+        avatarUrl: profile.user.avatarUrl,
+        character: profile.character,
+      };
+    }
+  } catch {
+    // Continue without profile data for JSON-LD
+  }
 
-              <p className="text-xs text-gray-600 mt-3">
-                Created {formatDate(character.createdAt)}
-              </p>
-            </div>
-
-            {/* Active commitments */}
-            <div className="mb-6">
-              <h3 className="text-sm text-gray-400 mb-3">
-                ACTIVE COMMITMENTS ({commitments.length})
-              </h3>
-              {commitments.length === 0 ? (
-                <p className="text-xs text-gray-600">No active commitments</p>
-              ) : (
-                <div className="space-y-2">
-                  {commitments.map((c: { owner: string | null; repo: string | null; isPrivate: boolean; commitmentEndsAt: number; renewalCount: number }, i: number) => (
-                    <div key={i} className="pixel-border bg-black p-3">
-                      <div className="flex justify-between items-center">
-                        {c.isPrivate ? (
-                          <span className="text-gray-500 text-sm">
-                            •••/secret-project 🔒
-                          </span>
-                        ) : (
-                          <a
-                            href={`https://github.com/${c.owner}/${c.repo}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[var(--pixel-green)] hover:underline text-sm"
-                          >
-                            {c.owner}/{c.repo}
-                          </a>
-                        )}
-                        <span className="text-xs text-gray-500">
-                          {formatTimeRemaining(c.commitmentEndsAt)}
-                        </span>
-                      </div>
-                      {c.renewalCount > 0 && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          Renewed {c.renewalCount}x
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Graveyard */}
-        {graveyard.length > 0 && (
-          <div>
-            <h3 className="text-sm text-gray-400 mb-3">
-              GRAVEYARD ({graveyard.length})
-            </h3>
-            <div className="space-y-2">
-              {graveyard.map((g: { name: string; level: number; deathCause: string; daysLived: number; diedAt: number; difficulty?: Difficulty }, i: number) => {
-                const diff = g.difficulty || "easy";
-                return (
-                  <div key={i} className="pixel-border bg-black p-3 opacity-60">
-                    <div className="flex justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-400">{g.name}</span>
-                        <span className={`text-xs ${DIFFICULTY_COLORS[diff].split(' ')[0]}`}>
-                          [{diff.toUpperCase()}]
-                        </span>
-                      </div>
-                      <span className="text-xs text-gray-600">Lvl {g.level}</span>
-                    </div>
-                    <p className="text-xs text-red-400 mt-1">{g.deathCause}</p>
-                    <p className="text-xs text-gray-600">
-                      Lived {g.daysLived} days - {formatDate(g.diedAt)}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* CTA for visitors */}
-        <div className="mt-8 text-center">
-          <Link
-            href="/"
-            className="text-[var(--pixel-green)] hover:underline text-sm"
-          >
-            Start your own adventure
-          </Link>
-        </div>
-      </div>
-    </AppShell>
+  return (
+    <>
+      {profileData && (
+        <ProfileJsonLd
+          username={profileData.username}
+          avatarUrl={profileData.avatarUrl}
+          character={profileData.character}
+        />
+      )}
+      <PublicProfileContent username={username} />
+    </>
   );
 }
