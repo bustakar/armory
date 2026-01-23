@@ -138,6 +138,17 @@ export const updatePersonalToken = internalMutation({
   },
 });
 
+// Get all usernames for sitemap (public, no auth required)
+export const getAllUsernames = query({
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return users.map((u) => ({
+      username: u.githubUsername,
+      createdAt: u.createdAt,
+    }));
+  },
+});
+
 // Check if user has personal access token configured
 export const hasPersonalToken = query({
   handler: async (ctx) => {
