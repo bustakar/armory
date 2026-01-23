@@ -1,51 +1,97 @@
-# Welcome to your Convex + Next.js + Clerk app
+# Armory
 
-This is a [Convex](https://convex.dev/) project created with [`npm create convex`](https://www.npmjs.com/package/create-convex).
+**Transform your GitHub activity into a survival game.**
 
-After the initial setup (<2 minutes) you'll have a working full-stack app using:
+Your character's HP constantly drains from active repo commitments. Stay alive by shipping code — merge PRs to heal, make commits to earn XP. Neglect your repos and your character dies.
 
-- Convex as your backend (database, server logic)
-- [React](https://react.dev/) as your frontend (web page interactivity)
-- [Next.js](https://nextjs.org/) for optimized web hosting and page routing
-- [Tailwind](https://tailwindcss.com/) for building great looking accessible UI
-- [Clerk](https://clerk.com/) for authentication
+[Live Demo](https://armory-brown.vercel.app)
 
-## Get started
+## How It Works
 
-If you just cloned this codebase and didn't use `npm create convex`, run:
+1. **Create a character** — Choose a name and difficulty level
+2. **Activate repos** — Select GitHub repositories to commit to (30-day cycles)
+3. **Survive the drain** — Each active repo drains HP over time
+4. **Ship code to heal** — Merged PRs restore HP, commits give XP
+5. **Level up** — Earn XP to increase your level
+6. **Don't die** — If HP hits 0, your character goes to the graveyard
 
+## Game Mechanics
+
+| Action | HP | XP | Notes |
+|--------|----|----|-------|
+| Merged PR (closes issue) | +12 | +50 | Best way to heal |
+| Merged PR (no issue) | +6 | +25 | |
+| Commit | - | +10 | Max 5/day per repo |
+| Active repo | -0.2 to -1.0/hr | - | Based on difficulty |
+| Early exit penalty | -50 | - | Leave commitment early |
+| Complete 30-day commitment | +10 | +25 | |
+
+### Difficulty Modes
+
+| Mode | HP Drain/hr | XP Multiplier |
+|------|-------------|---------------|
+| Easy | 0.2 | 1x |
+| Medium | 0.5 | 2x |
+| Hard | 1.0 | 3x |
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React 19, Tailwind CSS
+- **Backend**: Convex (real-time database + serverless functions)
+- **Auth**: Clerk (GitHub OAuth)
+- **Deployment**: Vercel
+
+## Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh) (package manager & runtime)
+- [Convex](https://convex.dev) account
+- [Clerk](https://clerk.dev) account with GitHub OAuth configured
+
+### Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/bustakar/armory.git
+cd armory
+
+# Install dependencies
+bun install
+
+# Set up environment variables
+cp .env.example .env.local
+# Fill in your Convex and Clerk credentials
+
+# Run development server
+bun run dev
 ```
-npm install
-npm run dev
+
+### Environment Variables
+
+#### Web App (`.env.local`)
+
+```bash
+# Clerk
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+CLERK_JWT_ISSUER_DOMAIN=https://your-domain.clerk.accounts.dev
+
+# Convex
+NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
 ```
 
-If you're reading this README on GitHub and want to use this template, run:
+#### Convex (Dashboard → Settings → Environment Variables)
 
+```bash
+# Clerk JWT Issuer Domain (must match web app)
+CLERK_JWT_ISSUER_DOMAIN=https://your-domain.clerk.accounts.dev
+
+# Encryption key for GitHub token storage (32 bytes)
+# Generate with: openssl rand -hex 32
+ENCRYPTION_KEY=your-64-char-hex-string
 ```
-npm create convex@latest -- -t nextjs-clerk
-```
 
-Then:
+## License
 
-1. Open your app. There should be a "Claim your application" button from Clerk in the bottom right of your app.
-2. Follow the steps to claim your application and link it to this app.
-3. Follow step 3 in the [Convex Clerk onboarding guide](https://docs.convex.dev/auth/clerk#get-started) to create a Convex JWT template.
-4. Uncomment the Clerk provider in `convex/auth.config.ts`
-5. Paste the Issuer URL as `CLERK_JWT_ISSUER_DOMAIN` to your dev deployment environment variable settings on the Convex dashboard (see [docs](https://docs.convex.dev/auth/clerk#configuring-dev-and-prod-instances))
-
-If you want to sync Clerk user data via webhooks, check out this [example repo](https://github.com/thomasballinger/convex-clerk-users-table/).
-
-## Learn more
-
-To learn more about developing your project with Convex, check out:
-
-- The [Tour of Convex](https://docs.convex.dev/get-started) for a thorough introduction to Convex principles.
-- The rest of [Convex docs](https://docs.convex.dev/) to learn about all Convex features.
-- [Stack](https://stack.convex.dev/) for in-depth articles on advanced topics.
-
-## Join the community
-
-Join thousands of developers building full-stack apps with Convex:
-
-- Join the [Convex Discord community](https://convex.dev/community) to get help in real-time.
-- Follow [Convex on GitHub](https://github.com/get-convex/), star and contribute to the open-source implementation of Convex.
+MIT
