@@ -22,6 +22,7 @@ interface CharacterCardProps {
   activeRepoCount: number;
   avatarUrl?: string;
   onKillCharacter?: () => void;
+  onUpgradeDifficulty?: (newDifficulty: "medium" | "hard") => void;
 }
 
 const HP_DRAIN_RATES: Record<Difficulty, number> = {
@@ -42,7 +43,7 @@ const DIFFICULTY_COLORS: Record<Difficulty, string> = {
   hard: "text-red-400 border-red-700 bg-red-900/30",
 };
 
-export function CharacterCard({ character, activeRepoCount, avatarUrl, onKillCharacter }: CharacterCardProps) {
+export function CharacterCard({ character, activeRepoCount, avatarUrl, onKillCharacter, onUpgradeDifficulty }: CharacterCardProps) {
   const difficulty = character.difficulty || "easy";
   const hourlyDrain = HP_DRAIN_RATES[difficulty] * activeRepoCount;
   const xpMultiplier = XP_MULTIPLIERS[difficulty];
@@ -109,15 +110,30 @@ export function CharacterCard({ character, activeRepoCount, avatarUrl, onKillCha
         </div>
       )}
 
-      {/* Kill character button */}
-      {onKillCharacter && (
-        <div className="mt-4 pt-4 border-t border-gray-700">
-          <button
-            onClick={onKillCharacter}
-            className="w-full text-xs text-gray-500 hover:text-red-400 transition-colors py-2"
-          >
-            End character...
-          </button>
+      {/* Footer actions */}
+      {(onUpgradeDifficulty || onKillCharacter) && (
+        <div className="mt-4 pt-4 border-t border-gray-700 space-y-2">
+          {/* Upgrade difficulty link - only show if not on hard */}
+          {onUpgradeDifficulty && difficulty !== "hard" && (
+            <button
+              onClick={() => {
+                const nextDifficulty = difficulty === "easy" ? "medium" : "hard";
+                onUpgradeDifficulty(nextDifficulty);
+              }}
+              className="w-full text-xs text-gray-500 hover:text-yellow-400 transition-colors py-2"
+            >
+              Upgrade difficulty...
+            </button>
+          )}
+          {/* Kill character button */}
+          {onKillCharacter && (
+            <button
+              onClick={onKillCharacter}
+              className="w-full text-xs text-gray-500 hover:text-red-400 transition-colors py-2"
+            >
+              End character...
+            </button>
+          )}
         </div>
       )}
     </div>
