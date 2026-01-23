@@ -184,3 +184,53 @@ export const getGraveyard = query({
       .collect();
   },
 });
+
+// Difficulty order for validation (can only increase)
+const DIFFICULTY_ORDER: Record<string, number> = {
+  easy: 0,
+  medium: 1,
+  hard: 2,
+};
+
+// Upgrade difficulty (one-way - can only increase)
+export const upgradeDifficulty = mutation({
+  args: {
+    newDifficulty: v.union(v.literal("medium"), v.literal("hard")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    // Get user's living character
+    const character = await ctx.db
+      .query("characters")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .filter((q) => q.eq(q.field("isAlive"), true))
+      .first();
+
+    if (!character) throw new Error("No living character found");
+
+    const currentDifficulty = character.difficulty || "easy";
+    const currentOrder = DIFFICULTY_ORDER[currentDifficulty];
+    const newOrder = DIFFICULTY_ORDER[args.newDifficulty];
+
+    // Validate upgrade direction (can only increase)
+    if (newOrder <= currentOrder) {
+      throw new Error("Can only upgrade to a higher difficulty");
+    }
+
+    // Update character difficulty
+    await ctx.db.patch(character._id, {
+      difficulty: args.newDifficulty,
+    });
+
+    return { success: true };
+  },
+});
