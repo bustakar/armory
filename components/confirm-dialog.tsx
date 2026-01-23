@@ -8,7 +8,7 @@ interface ConfirmDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: "danger" | "default";
+  variant?: "danger" | "warning" | "default";
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -89,7 +89,7 @@ export function ConfirmDialog({
         >
           {title}
         </h2>
-        <p className="text-xs text-gray-400 mb-6">{message}</p>
+        <p className="text-xs text-gray-400 mb-6 whitespace-pre-line">{message}</p>
 
         <div className="flex gap-3 justify-end">
           <button
@@ -104,7 +104,9 @@ export function ConfirmDialog({
             className={`text-xs px-4 py-2 ${
               variant === "danger"
                 ? "bg-red-700 text-white hover:bg-red-600"
-                : "bg-[var(--pixel-green)] text-black hover:bg-[var(--pixel-dark-green)]"
+                : variant === "warning"
+                  ? "bg-yellow-600 text-black hover:bg-yellow-500"
+                  : "bg-[var(--pixel-green)] text-black hover:bg-[var(--pixel-dark-green)]"
             }`}
           >
             {confirmText}

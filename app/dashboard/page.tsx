@@ -31,6 +31,10 @@ export default function Dashboard() {
     commitmentId: string | null;
   }>({ isOpen: false, commitmentId: null });
   const [killCharacterDialog, setKillCharacterDialog] = useState(false);
+  const [upgradeDialog, setUpgradeDialog] = useState<{
+    isOpen: boolean;
+    newDifficulty: "medium" | "hard" | null;
+  }>({ isOpen: false, newDifficulty: null });
 
   // Convex queries
   const user = useQuery(api.users.get);
@@ -45,6 +49,7 @@ export default function Dashboard() {
   const deactivateCommitment = useMutation(api.commitments.deactivate);
   const renewCommitment = useMutation(api.commitments.renew);
   const voluntaryDeath = useMutation(api.scannerMutations.voluntaryDeath);
+  const upgradeDifficulty = useMutation(api.characters.upgradeDifficulty);
 
   // Convex actions (server-side GitHub operations)
   const getUserRepos = useAction(api.githubActions.getUserRepos);
@@ -220,6 +225,28 @@ export default function Dashboard() {
     setKillCharacterDialog(false);
   };
 
+  const handleUpgradeDifficulty = (newDifficulty: "medium" | "hard") => {
+    setUpgradeDialog({ isOpen: true, newDifficulty });
+  };
+
+  const handleConfirmUpgrade = async () => {
+    if (upgradeDialog.newDifficulty) {
+      try {
+        await upgradeDifficulty({ newDifficulty: upgradeDialog.newDifficulty });
+        showSuccess(`Difficulty upgraded to ${upgradeDialog.newDifficulty}!`);
+      } catch (error) {
+        console.error("Failed to upgrade difficulty:", error);
+        const message = error instanceof Error ? error.message : "Failed to upgrade difficulty";
+        showError(message);
+      }
+    }
+    setUpgradeDialog({ isOpen: false, newDifficulty: null });
+  };
+
+  const handleCancelUpgrade = () => {
+    setUpgradeDialog({ isOpen: false, newDifficulty: null });
+  };
+
   const handleRenew = async (id: string) => {
     try {
       await renewCommitment({ commitmentId: id as Id<"commitments"> });
@@ -281,6 +308,7 @@ export default function Dashboard() {
                   activeRepoCount={commitments?.length || 0}
                   avatarUrl={avatarUrl}
                   onKillCharacter={handleKillCharacter}
+                  onUpgradeDifficulty={handleUpgradeDifficulty}
                 />
               </section>
 
@@ -348,6 +376,22 @@ export default function Dashboard() {
         variant="danger"
         onConfirm={handleConfirmKillCharacter}
         onCancel={handleCancelKillCharacter}
+      />
+
+      {/* Confirmation Dialog for upgrading difficulty */}
+      <ConfirmDialog
+        isOpen={upgradeDialog.isOpen}
+        title="Upgrade Difficulty"
+        message={`This change is permanent and cannot be undone.\n\n${
+          upgradeDialog.newDifficulty === "medium"
+            ? "Medium difficulty:\n• HP drain: 0.5 per repo/hour (was 0.2)\n• XP multiplier: 2x (was 1x)"
+            : "Hard difficulty:\n• HP drain: 1.0 per repo/hour (was 0.2-0.5)\n• XP multiplier: 3x (was 1-2x)"
+        }`}
+        confirmText={`Upgrade to ${upgradeDialog.newDifficulty?.toUpperCase()}`}
+        cancelText="Cancel"
+        variant="warning"
+        onConfirm={handleConfirmUpgrade}
+        onCancel={handleCancelUpgrade}
       />
     </AppShell>
   );
