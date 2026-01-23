@@ -9,9 +9,9 @@ export type Difficulty = "easy" | "medium" | "hard";
 
 // HP drain rates per repo per hour by difficulty
 export const HP_DRAIN_RATES: Record<Difficulty, number> = {
-  easy: 0.2,
-  medium: 0.5,
-  hard: 1.0,
+  easy: 0.5,   // 12 HP/day → ~8 days survival without PRs
+  medium: 1.5, // 36 HP/day → ~2.8 days survival without PRs
+  hard: 4.0,   // 96 HP/day → ~1 day survival without PRs
 };
 
 // XP multipliers by difficulty
@@ -29,8 +29,8 @@ export const HP_DRAIN_PER_REPO_PER_HOUR = HP_DRAIN_RATES.easy;
 // PRs: Only source of HP, higher reward if PR closes issues
 export const REWARDS = {
   commit: { hp: 0, xp: 10, dailyCap: 5 },
-  prMergedWithIssue: { hp: 12, xp: 50, dailyCap: null },
-  prMergedNoIssue: { hp: 6, xp: 25, dailyCap: null },
+  prMergedWithIssue: { hp: 24, xp: 50, dailyCap: null },
+  prMergedNoIssue: { hp: 12, xp: 25, dailyCap: null },
   // Streaks
   streak7: { hp: 5, xp: 15 },
   streak30: { hp: 15, xp: 50 },
