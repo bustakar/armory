@@ -78,9 +78,9 @@ export function PublicProfileContent({ username }: { username: string }) {
             </p>
           </section>
         ) : (
-          <>
+          <div className="flex flex-col gap-4">
             {/* Character card */}
-            <section className="pixel-border bg-black p-4 mb-6" aria-labelledby="character-heading">
+            <section className="pixel-border bg-black p-4" aria-labelledby="character-heading">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export function PublicProfileContent({ username }: { username: string }) {
             </section>
 
             {/* Active commitments */}
-            <section className="mb-6" aria-labelledby="commitments-heading">
+            <section aria-labelledby="commitments-heading">
               <h3 id="commitments-heading" className="text-sm text-gray-400 mb-3">
                 ACTIVE COMMITMENTS ({commitments.length})
               </h3>
@@ -161,12 +161,12 @@ export function PublicProfileContent({ username }: { username: string }) {
                 </ul>
               )}
             </section>
-          </>
+          </div>
         )}
 
         {/* Graveyard */}
         {graveyard.length > 0 && (
-          <section aria-labelledby="graveyard-heading">
+          <section className="mt-4" aria-labelledby="graveyard-heading">
             <h3 id="graveyard-heading" className="text-sm text-gray-400 mb-3">
               GRAVEYARD ({graveyard.length})
             </h3>
