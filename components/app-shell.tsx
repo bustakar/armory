@@ -34,7 +34,7 @@ export function AppShell({ children, rightNav, centered = true }: AppShellProps)
       <main
         id="main"
         className={`flex-1 flex flex-col px-6 ${
-          centered ? "items-center justify-center py-10" : "items-center pt-10 pb-10"
+          centered ? "items-center justify-center py-10" : "items-center pt-4 pb-10"
         }`}
       >
         {children}
