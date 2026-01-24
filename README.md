@@ -4,7 +4,7 @@
 
 Your character's HP constantly drains from active repo commitments. Stay alive by shipping code — merge PRs to heal, make commits to earn XP. Neglect your repos and your character dies.
 
-[Live Demo](https://armory-brown.vercel.app)
+[Live Demo](https://armory.rip)
 
 ## How It Works
 
@@ -19,20 +19,20 @@ Your character's HP constantly drains from active repo commitments. Stay alive b
 
 | Action | HP | XP | Notes |
 |--------|----|----|-------|
-| Merged PR (closes issue) | +12 | +50 | Best way to heal |
-| Merged PR (no issue) | +6 | +25 | |
+| Merged PR (closes issue) | +24 | +50 | Best way to heal |
+| Merged PR (no issue) | +12 | +25 | |
 | Commit | - | +10 | Max 5/day per repo |
-| Active repo | -0.2 to -1.0/hr | - | Based on difficulty |
+| Active repo | -0.5 to -4.0/hr | - | Based on difficulty |
 | Early exit penalty | -50 | - | Leave commitment early |
 | Complete 30-day commitment | +10 | +25 | |
 
 ### Difficulty Modes
 
-| Mode | HP Drain/hr | XP Multiplier |
-|------|-------------|---------------|
-| Easy | 0.2 | 1x |
-| Medium | 0.5 | 2x |
-| Hard | 1.0 | 3x |
+| Mode | HP Drain/hr | XP Multiplier | Survival (no PRs) |
+|------|-------------|---------------|-------------------|
+| Easy | 0.5 | 1x | ~8 days |
+| Medium | 1.5 | 2x | ~2.8 days |
+| Hard | 4.0 | 3x | ~1 day |
 
 ## Tech Stack
 
