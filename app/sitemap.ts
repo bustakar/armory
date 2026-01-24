@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.dev";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.rip";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages

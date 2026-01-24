@@ -5,7 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastProvider } from "@/components/toast";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.dev";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.rip";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
     description:
       "Stake your HP on GitHub activity. Survive or perish. Turn your commits into XP.",
     images: ["/og-image.png"],
-    creator: "@armorydev",
+    creator: "@armoryrip",
   },
   alternates: {
     canonical: siteUrl,
