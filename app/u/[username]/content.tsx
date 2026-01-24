@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery } from "convex/react";
+import { useUser } from "@clerk/nextjs";
 import { api } from "../../../convex/_generated/api";
 import { HpBar } from "@/components/hp-bar";
 import { XpBar } from "@/components/xp-bar";
 import { formatTimeRemaining, formatDate } from "@/lib/utils";
+import { analytics } from "@/lib/analytics";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 
@@ -18,6 +21,16 @@ const DIFFICULTY_COLORS: Record<Difficulty, string> = {
 
 export function PublicProfileContent({ username }: { username: string }) {
   const profile = useQuery(api.characters.getPublicProfile, { username });
+  const { user: currentUser } = useUser();
+
+  useEffect(() => {
+    if (profile !== undefined) {
+      analytics.profileViewed({
+        username,
+        isOwnProfile: currentUser?.username === username,
+      });
+    }
+  }, [profile, username, currentUser?.username]);
 
   if (profile === undefined) {
     return (

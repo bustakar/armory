@@ -2,10 +2,11 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
+import { PostHogIdentify } from "@/components/PostHogProvider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastProvider } from "@/components/toast";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.dev";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.rip";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -70,7 +71,7 @@ export const metadata: Metadata = {
     description:
       "Stake your HP on GitHub activity. Survive or perish. Turn your commits into XP.",
     images: ["/og-image.png"],
-    creator: "@armorydev",
+    creator: "@armoryrip",
   },
   alternates: {
     canonical: siteUrl,
@@ -168,6 +169,7 @@ export default function RootLayout({
           Skip to main content
         </a>
         <ClerkProvider dynamic>
+          <PostHogIdentify />
           <ConvexClientProvider>
             <ToastProvider>
               <ErrorBoundary>{children}</ErrorBoundary>

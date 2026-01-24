@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { formatTimeRemaining } from "@/lib/utils";
+import { analytics } from "@/lib/analytics";
 
 interface Commitment {
   _id: string;
@@ -109,13 +110,19 @@ export function CommitmentList({
               {isComplete ? (
                 <>
                   <button
-                    onClick={() => onRenew(commitment._id)}
+                    onClick={() => {
+                      analytics.commitmentRenewed({ repo: `${commitment.owner}/${commitment.repo}`, renewalCount: 1 });
+                      onRenew(commitment._id);
+                    }}
                     className="flex-1 bg-green-700 hover:bg-green-600 text-white text-xs py-2 px-3 transition-colors"
                   >
                     Renew (+25 XP)
                   </button>
                   <button
-                    onClick={() => onDeactivate(commitment._id)}
+                    onClick={() => {
+                      analytics.commitmentDeactivated({ repo: `${commitment.owner}/${commitment.repo}`, wasEarlyExit: false });
+                      onDeactivate(commitment._id);
+                    }}
                     className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs py-2 px-3 transition-colors"
                   >
                     Complete
@@ -123,7 +130,10 @@ export function CommitmentList({
                 </>
               ) : (
                 <button
-                  onClick={() => onDeactivate(commitment._id)}
+                  onClick={() => {
+                    analytics.commitmentDeactivated({ repo: `${commitment.owner}/${commitment.repo}`, wasEarlyExit: true });
+                    onDeactivate(commitment._id);
+                  }}
                   className="flex-1 bg-red-900 hover:bg-red-800 text-white text-xs py-2 px-3 transition-colors"
                 >
                   Exit Early (-50 HP)
