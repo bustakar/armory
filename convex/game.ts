@@ -4,6 +4,9 @@ export const COMMITMENT_DAYS = 30;
 export const MAX_HP = 100;
 export const XP_PER_LEVEL = 100;
 
+// Diversity bonus: +20% XP per additional repo contributed to in 6-hour window
+export const DIVERSITY_MULTIPLIER_STEP = 0.2;
+
 // Difficulty types
 export type Difficulty = "easy" | "medium" | "hard";
 
@@ -74,4 +77,14 @@ export function msToHours(ms: number): number {
 
 export function daysToMs(days: number): number {
   return days * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Calculate diversity multiplier based on repos contributed to.
+ * Formula: 1 + (repos - 1) × 0.2
+ * Examples: 1 repo = 1.0x, 2 repos = 1.2x, 3 repos = 1.4x
+ */
+export function getDiversityMultiplier(reposContributed: number): number {
+  if (reposContributed <= 1) return 1.0;
+  return 1 + (reposContributed - 1) * DIVERSITY_MULTIPLIER_STEP;
 }

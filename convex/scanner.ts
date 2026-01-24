@@ -9,6 +9,7 @@ import {
   REWARDS,
   getTodayString,
   Difficulty,
+  getDiversityMultiplier,
 } from "./game";
 import { fetchCommits, fetchMergedPRs, fetchPRDetails, GitHubAPIError } from "./github";
 import { decrypt } from "./crypto";
@@ -245,6 +246,23 @@ async function processUserActivity(
         commits: cappedCommits,
         issuesClosed: 0, // No longer tracking issues separately
       });
+
+      // Log per-commitment activity for diversity bonus tracking
+      if (commits.length > 0 || prs.length > 0) {
+        await ctx.runMutation(internal.scannerMutations.logActivity, {
+          userId: userData.userId,
+          characterId: userData.characterId,
+          commitmentId: commitment._id,
+          activeRepoCount: 1,
+          commits: commits.length,
+          issuesClosed: 0,
+          prsMerged: prs.length,
+          hpDrain: 0, // Drain is logged in aggregated entry
+          hpGain: prHp,
+          hpNet: prHp,
+          xpGained: commitXp + prXp,
+        });
+      }
     } catch (error) {
       // Log error but continue processing other commitments
       logError("scanner:processCommitment", error, {
@@ -291,3 +309,96 @@ async function processUserActivity(
     });
   }
 }
+
+// Process diversity bonus every 6 hours
+// Windows: 0:00-6:00, 6:00-12:00, 12:00-18:00, 18:00-24:00 UTC
+export const processDiversityBonus = internalAction({
+  handler: async (ctx) => {
+    const now = Date.now();
+    const sixHoursAgo = now - 6 * 60 * 60 * 1000;
+
+    // Get all activities in the last 6 hours
+    const activities = await ctx.runQuery(
+      internal.scannerQueries.getWindowActivities,
+      { since: sixHoursAgo }
+    );
+
+    // Group activities by user
+    const userActivities = new Map<
+      string,
+      {
+        userId: Id<"users">;
+        characterId: Id<"characters">;
+        logs: typeof activities;
+      }
+    >();
+
+    for (const activity of activities) {
+      const key = activity.userId;
+      if (!userActivities.has(key)) {
+        userActivities.set(key, {
+          userId: activity.userId,
+          characterId: activity.characterId,
+          logs: [],
+        });
+      }
+      userActivities.get(key)!.logs.push(activity);
+    }
+
+    let usersProcessed = 0;
+    let bonusesAwarded = 0;
+    let totalBonusXp = 0;
+
+    for (const [, userData] of userActivities) {
+      usersProcessed++;
+
+      // Count unique repos with commits or PRs (must have commitmentId and activity)
+      const reposWithActivity = new Set(
+        userData.logs
+          .filter(
+            (log) =>
+              log.commitmentId && (log.commits > 0 || log.prsMerged > 0)
+          )
+          .map((log) => log.commitmentId)
+      );
+
+      const reposCount = reposWithActivity.size;
+
+      // Sum XP earned in window (only from per-commitment logs, not aggregated ones)
+      const windowXp = userData.logs
+        .filter((log) => log.commitmentId)
+        .reduce((sum, log) => sum + log.xpGained, 0);
+
+      // Calculate diversity multiplier
+      const multiplier = getDiversityMultiplier(reposCount);
+
+      if (multiplier > 1 && windowXp > 0) {
+        const bonusXp = Math.round(windowXp * (multiplier - 1));
+
+        // Verify character is still alive
+        const character = await ctx.runQuery(
+          internal.scannerQueries.getActiveCharacter,
+          { userId: userData.userId }
+        );
+
+        if (character) {
+          // Award bonus XP
+          await ctx.runMutation(internal.scannerMutations.awardBonusXp, {
+            characterId: character._id,
+            bonusXp,
+            reason: `Diversity bonus: ${reposCount} repos (${Math.round((multiplier - 1) * 100)}% bonus)`,
+          });
+
+          bonusesAwarded++;
+          totalBonusXp += bonusXp;
+        }
+      }
+    }
+
+    console.log(`[diversityBonus] Processing complete:`, {
+      usersProcessed,
+      bonusesAwarded,
+      totalBonusXp,
+    });
+  },
+});

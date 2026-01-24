@@ -59,6 +59,7 @@ export default defineSchema({
   activityLogs: defineTable({
     userId: v.id("users"),
     characterId: v.id("characters"),
+    commitmentId: v.optional(v.id("commitments")), // Track which repo for diversity bonus
     timestamp: v.number(),
     activeRepoCount: v.number(),
     // Activity in this hour
@@ -70,7 +71,11 @@ export default defineSchema({
     hpGain: v.float64(), // Positive value
     hpNet: v.float64(), // Net change
     xpGained: v.number(),
-  }).index("by_user", ["userId"]),
+    // Bonus tracking
+    bonusReason: v.optional(v.string()), // e.g., "Diversity bonus: 3 repos"
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_timestamp", ["userId", "timestamp"]),
 
   // Daily activity caps tracking
   dailyActivity: defineTable({

@@ -18,6 +18,7 @@ import type * as githubActions from "../githubActions.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as scanner from "../scanner.js";
 import type * as scannerMutations from "../scannerMutations.js";
+import type * as scannerQueries from "../scannerQueries.js";
 import type * as users from "../users.js";
 
 import type {
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   "lib/errors": typeof lib_errors;
   scanner: typeof scanner;
   scannerMutations: typeof scannerMutations;
+  scannerQueries: typeof scannerQueries;
   users: typeof users;
 }>;
 

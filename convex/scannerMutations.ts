@@ -165,6 +165,7 @@ export const logActivity = internalMutation({
   args: {
     userId: v.id("users"),
     characterId: v.id("characters"),
+    commitmentId: v.optional(v.id("commitments")),
     activeRepoCount: v.number(),
     commits: v.number(),
     issuesClosed: v.number(),
@@ -173,11 +174,13 @@ export const logActivity = internalMutation({
     hpGain: v.float64(),
     hpNet: v.float64(),
     xpGained: v.number(),
+    bonusReason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ctx.db.insert("activityLogs", {
       userId: args.userId,
       characterId: args.characterId,
+      commitmentId: args.commitmentId,
       timestamp: Date.now(),
       activeRepoCount: args.activeRepoCount,
       commits: args.commits,
@@ -187,6 +190,43 @@ export const logActivity = internalMutation({
       hpGain: args.hpGain,
       hpNet: args.hpNet,
       xpGained: args.xpGained,
+      bonusReason: args.bonusReason,
+    });
+  },
+});
+
+// Award bonus XP (for diversity bonus, etc.)
+export const awardBonusXp = internalMutation({
+  args: {
+    characterId: v.id("characters"),
+    bonusXp: v.number(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const character = await ctx.db.get(args.characterId);
+    if (!character || !character.isAlive) return;
+
+    const newXp = character.xp + args.bonusXp;
+
+    await ctx.db.patch(args.characterId, {
+      xp: newXp,
+      level: calculateLevel(newXp),
+    });
+
+    // Log the bonus as an activity entry
+    await ctx.db.insert("activityLogs", {
+      userId: character.userId,
+      characterId: args.characterId,
+      timestamp: Date.now(),
+      activeRepoCount: 0,
+      commits: 0,
+      issuesClosed: 0,
+      prsMerged: 0,
+      hpDrain: 0,
+      hpGain: 0,
+      hpNet: 0,
+      xpGained: args.bonusXp,
+      bonusReason: args.reason,
     });
   },
 });
