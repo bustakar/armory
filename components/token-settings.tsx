@@ -5,6 +5,7 @@ import { useQuery, useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { ConfirmDialog } from "./confirm-dialog";
 import { useToast } from "./toast";
+import { analytics } from "@/lib/analytics";
 
 export function TokenSettings() {
   const { showError, showSuccess } = useToast();
@@ -103,7 +104,10 @@ export function TokenSettings() {
                 Add a GitHub PAT to access private repositories.
               </p>
               <button
-                onClick={() => setIsOpen(true)}
+                onClick={() => {
+                  analytics.tokenSettingsOpened();
+                  setIsOpen(true);
+                }}
                 className="text-xs text-[var(--pixel-green)] hover:underline"
               >
                 + Add Token
