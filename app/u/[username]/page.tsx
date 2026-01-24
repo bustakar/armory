@@ -3,7 +3,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../convex/_generated/api";
 import { PublicProfileContent } from "./content";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.dev";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://armory.rip";
 
 // Generate dynamic metadata for profile pages
 export async function generateMetadata({
