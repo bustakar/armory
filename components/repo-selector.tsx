@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { analytics } from "@/lib/analytics";
 
 interface Repo {
   owner: { login: string };
@@ -106,6 +107,7 @@ export function RepoSelector({
                   role="option"
                   aria-selected={false}
                   onClick={() => {
+                    analytics.commitmentActivated({ repo: repo.full_name, isPrivate: repo.isPrivate ?? false });
                     onActivate(repo.owner.login, repo.name, repo.isPrivate ?? false);
                     setIsOpen(false);
                     setSearch("");

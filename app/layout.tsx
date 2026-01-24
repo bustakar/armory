@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
+import { PostHogIdentify } from "@/components/PostHogProvider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastProvider } from "@/components/toast";
 
@@ -168,6 +169,7 @@ export default function RootLayout({
           Skip to main content
         </a>
         <ClerkProvider dynamic>
+          <PostHogIdentify />
           <ConvexClientProvider>
             <ToastProvider>
               <ErrorBoundary>{children}</ErrorBoundary>

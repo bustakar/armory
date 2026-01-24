@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { analytics } from "@/lib/analytics";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -45,6 +46,7 @@ export function CreateCharacter({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
+      analytics.characterCreated({ name: name.trim(), difficulty });
       onSubmit(name.trim(), difficulty);
     }
   };
