@@ -39,8 +39,8 @@ export const REWARDS = {
   streak30: { hp: 15, xp: 50 },
   streak100: { hp: 30, xp: 200 },
   // Commitments
-  commitmentComplete: { hp: 10, xp: 25 },
-  commitmentRenew: { xp: 25 },
+  commitmentComplete: { hp: 100, xp: 1000 },
+  commitmentRenew: { xp: 250 },
 } as const;
 
 // Helper functions
