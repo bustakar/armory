@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useQuery } from "convex/react";
-import { useUser } from "@clerk/nextjs";
+import { useUser, UserButton } from "@clerk/nextjs";
 import { api } from "../../../convex/_generated/api";
 import { HpBar } from "@/components/hp-bar";
 import { XpBar } from "@/components/xp-bar";
@@ -21,7 +21,21 @@ const DIFFICULTY_COLORS: Record<Difficulty, string> = {
 
 export function PublicProfileContent({ username }: { username: string }) {
   const profile = useQuery(api.characters.getPublicProfile, { username });
-  const { user: currentUser } = useUser();
+  const { user: currentUser, isSignedIn } = useUser();
+
+  // Build user nav for logged-in users
+  const userNav = isSignedIn && currentUser ? (
+    <>
+      <a
+        href={`/u/${currentUser.username}`}
+        className="text-sm text-[var(--pixel-green)] hover:underline"
+        title="View your profile"
+      >
+        @{currentUser.username}
+      </a>
+      <UserButton afterSignOutUrl="/" />
+    </>
+  ) : null;
 
   useEffect(() => {
     if (profile !== undefined) {
@@ -34,7 +48,7 @@ export function PublicProfileContent({ username }: { username: string }) {
 
   if (profile === undefined) {
     return (
-      <AppShell>
+      <AppShell rightNav={userNav}>
         <p className="text-[var(--pixel-green)]">Loading...</p>
       </AppShell>
     );
@@ -42,7 +56,7 @@ export function PublicProfileContent({ username }: { username: string }) {
 
   if (profile === null) {
     return (
-      <AppShell>
+      <AppShell rightNav={userNav}>
         <div className="pixel-border bg-black p-8 max-w-md text-center">
           <h1 className="text-xl text-red-400 mb-4">Player Not Found</h1>
           <p className="text-gray-400 mb-6">
@@ -62,7 +76,7 @@ export function PublicProfileContent({ username }: { username: string }) {
   const { user, character, commitments, graveyard } = profile;
 
   return (
-    <AppShell centered={false}>
+    <AppShell rightNav={userNav} centered={false}>
       <article className="w-full max-w-2xl" itemScope itemType="https://schema.org/ProfilePage">
         {/* Player info */}
         <header className="flex items-center gap-4 mb-6">
