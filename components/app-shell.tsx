@@ -14,9 +14,14 @@ export function AppShell({ children, rightNav, centered = true }: AppShellProps)
     <div className="min-h-screen flex flex-col">
       {/* Navbar - full width */}
       <header className="w-full px-4 py-3 border-b border-gray-700 flex justify-between items-center">
-        <Link href="/" className="text-xl text-[var(--pixel-gold)] hover:opacity-80">
-          ARMORY
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/" className="text-xl text-[var(--pixel-gold)] hover:opacity-80">
+            ARMORY
+          </Link>
+          <Link href="/rules" className="text-gray-500 hover:text-gray-400 text-xs">
+            Rules
+          </Link>
+        </div>
         <div className="flex items-center gap-4">
           {rightNav}
           <a

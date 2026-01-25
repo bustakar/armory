@@ -2,8 +2,7 @@
 
 import { HpBar } from "./hp-bar";
 import { XpBar } from "./xp-bar";
-
-type Difficulty = "easy" | "medium" | "hard";
+import { HP_DRAIN_RATES, XP_MULTIPLIERS, type Difficulty } from "@/convex/game";
 
 interface Character {
   _id: string;
@@ -24,18 +23,6 @@ interface CharacterCardProps {
   onKillCharacter?: () => void;
   onUpgradeDifficulty?: (newDifficulty: "medium" | "hard") => void;
 }
-
-const HP_DRAIN_RATES: Record<Difficulty, number> = {
-  easy: 0.5,
-  medium: 1.5,
-  hard: 4.0,
-};
-
-const XP_MULTIPLIERS: Record<Difficulty, number> = {
-  easy: 1,
-  medium: 2,
-  hard: 3,
-};
 
 const DIFFICULTY_COLORS: Record<Difficulty, string> = {
   easy: "text-green-400 border-green-700 bg-green-900/30",

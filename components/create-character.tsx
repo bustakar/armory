@@ -15,23 +15,23 @@ const DIFFICULTY_INFO: Record<Difficulty, { label: string; color: string; hpDrai
   easy: {
     label: "Easy",
     color: "text-green-400",
-    hpDrain: 0.2,
+    hpDrain: 0.5,
     xpMultiplier: 1,
-    description: "1 PR/day total survives 3 repos",
+    description: "~8 days survival without PRs",
   },
   medium: {
     label: "Medium",
     color: "text-yellow-400",
-    hpDrain: 0.5,
+    hpDrain: 1.5,
     xpMultiplier: 2,
-    description: "1 PR/day per repo survives 3 repos",
+    description: "~2.8 days survival without PRs",
   },
   hard: {
     label: "Hard",
     color: "text-red-400",
-    hpDrain: 1.0,
+    hpDrain: 4.0,
     xpMultiplier: 3,
-    description: "2 PRs/day per repo survives 3 repos",
+    description: "~1 day survival without PRs",
   },
 };
 
