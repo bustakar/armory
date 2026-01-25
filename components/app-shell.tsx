@@ -21,7 +21,10 @@ export function AppShell({ children, rightNav, centered = true }: AppShellProps)
           <Link href="/" className="text-xl text-[var(--pixel-gold)] hover:opacity-80">
             ARMORY
           </Link>
-          {/* Desktop only: Rules link */}
+          {/* Desktop only: Nav links */}
+          <Link href="/leaderboard" className="hidden sm:block text-gray-500 hover:text-gray-400 text-xs">
+            Leaderboard
+          </Link>
           <Link href="/rules" className="hidden sm:block text-gray-500 hover:text-gray-400 text-xs">
             Rules
           </Link>
@@ -91,6 +94,13 @@ export function AppShell({ children, rightNav, centered = true }: AppShellProps)
             )}
 
             {/* Navigation links */}
+            <Link
+              href="/leaderboard"
+              onClick={() => setSidebarOpen(false)}
+              className="block py-2 text-gray-300 hover:text-white"
+            >
+              Leaderboard
+            </Link>
             <Link
               href="/rules"
               onClick={() => setSidebarOpen(false)}

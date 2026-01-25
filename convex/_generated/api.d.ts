@@ -15,6 +15,7 @@ import type * as crypto from "../crypto.js";
 import type * as game from "../game.js";
 import type * as github from "../github.js";
 import type * as githubActions from "../githubActions.js";
+import type * as leaderboard from "../leaderboard.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as scanner from "../scanner.js";
 import type * as scannerMutations from "../scannerMutations.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   game: typeof game;
   github: typeof github;
   githubActions: typeof githubActions;
+  leaderboard: typeof leaderboard;
   "lib/errors": typeof lib_errors;
   scanner: typeof scanner;
   scannerMutations: typeof scannerMutations;
