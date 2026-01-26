@@ -15,11 +15,13 @@ export const get = query({
 
     if (!user) return null;
 
-    return await ctx.db
+    const character = await ctx.db
       .query("characters")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .filter((q) => q.eq(q.field("isAlive"), true))
       .first();
+
+    return character;
   },
 });
 
