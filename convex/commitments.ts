@@ -1,11 +1,11 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  COMMITMENT_DAYS,
   EARLY_EXIT_PENALTY,
   REWARDS,
   daysToMs,
   clampHp,
+  getCommitmentReward,
 } from "./game";
 
 // Get active commitments for current user
@@ -57,8 +57,13 @@ export const activate = mutation({
     owner: v.string(),
     repo: v.string(),
     isPrivate: v.optional(v.boolean()),
+    commitmentDays: v.optional(v.number()), // 7, 14, or 28 (defaults to 7)
   },
   handler: async (ctx, args) => {
+    const days = args.commitmentDays ?? 7;
+    if (![7, 14, 28].includes(days)) {
+      throw new Error("Invalid commitment length. Must be 7, 14, or 28 days.");
+    }
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
@@ -104,7 +109,8 @@ export const activate = mutation({
       repo: args.repo,
       isPrivate: args.isPrivate,
       activatedAt: now,
-      commitmentEndsAt: now + daysToMs(COMMITMENT_DAYS),
+      commitmentEndsAt: now + daysToMs(days),
+      commitmentDays: days,
       renewalCount: 0,
       totalCommits: 0,
       totalIssuesClosed: 0,
@@ -164,12 +170,13 @@ export const deactivate = mutation({
         }
       }
     } else {
-      // Completed commitment bonus
+      // Completed commitment bonus (scaled by commitment length)
       const character = await ctx.db.get(commitment.characterId);
       if (character && character.isAlive) {
+        const reward = getCommitmentReward(commitment.commitmentDays ?? 28);
         await ctx.db.patch(commitment.characterId, {
-          hp: clampHp(character.hp + REWARDS.commitmentComplete.hp),
-          xp: character.xp + REWARDS.commitmentComplete.xp,
+          hp: clampHp(character.hp + reward.hp),
+          xp: character.xp + reward.xp,
         });
       }
     }
@@ -178,7 +185,7 @@ export const deactivate = mutation({
   },
 });
 
-// Renew a commitment for another 30 days
+// Renew a commitment for the same length
 export const renew = mutation({
   args: {
     commitmentId: v.id("commitments"),
@@ -209,9 +216,10 @@ export const renew = mutation({
       throw new Error("Commitment period not yet complete");
     }
 
-    // Renew for another 30 days
+    // Renew for the same length as the original commitment
+    const days = commitment.commitmentDays ?? 28;
     await ctx.db.patch(args.commitmentId, {
-      commitmentEndsAt: now + daysToMs(COMMITMENT_DAYS),
+      commitmentEndsAt: now + daysToMs(days),
       renewalCount: commitment.renewalCount + 1,
     });
 
