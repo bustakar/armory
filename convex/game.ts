@@ -1,8 +1,17 @@
 // Game constants
 export const EARLY_EXIT_PENALTY = 50;
-export const COMMITMENT_DAYS = 30;
+export const COMMITMENT_DAYS = 28; // Default commitment length (legacy)
 export const MAX_HP = 100;
 export const XP_PER_LEVEL = 100;
+
+// Commitment length options with scaling rewards
+export const COMMITMENT_OPTIONS = [
+  { days: 7, label: "1 week", xp: 1000 },
+  { days: 14, label: "2 weeks", xp: 2500 },
+  { days: 28, label: "4 weeks", xp: 10000 },
+] as const;
+
+export type CommitmentDays = 7 | 14 | 28;
 
 // Diversity bonus: +20% XP per additional repo contributed to in 6-hour window
 export const DIVERSITY_MULTIPLIER_STEP = 0.2;
@@ -54,6 +63,11 @@ export function calculateHpDrain(activeRepoCount: number, hours: number = 1, dif
 
 export function clampHp(hp: number): number {
   return Math.max(0, Math.min(MAX_HP, hp));
+}
+
+export function getCommitmentReward(days: number): { hp: number; xp: number } {
+  const option = COMMITMENT_OPTIONS.find((o) => o.days === days);
+  return { hp: 100, xp: option?.xp ?? 1000 };
 }
 
 export function getDeathCause(activeRepoCount: number): string {

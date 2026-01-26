@@ -31,7 +31,7 @@ export default defineSchema({
     difficulty: v.optional(v.union(v.literal("easy"), v.literal("medium"), v.literal("hard"))), // Defaults to "easy" for existing characters
   }).index("by_user", ["userId"]),
 
-  // 30-day commitment cycles
+  // Commitment cycles (1, 2, or 4 weeks)
   commitments: defineTable({
     userId: v.id("users"),
     characterId: v.id("characters"),
@@ -39,7 +39,8 @@ export default defineSchema({
     repo: v.string(), // GitHub repo
     isPrivate: v.optional(v.boolean()), // Whether repo is private (hidden in public profile)
     activatedAt: v.number(), // Timestamp
-    commitmentEndsAt: v.number(), // activatedAt + 30 days
+    commitmentEndsAt: v.number(), // activatedAt + commitmentDays
+    commitmentDays: v.optional(v.number()), // 7, 14, or 28 (optional for backwards compat)
     deactivatedAt: v.optional(v.number()), // Set when commitment ends
     wasEarlyExit: v.optional(v.boolean()),
     renewalCount: v.number(), // Number of times renewed

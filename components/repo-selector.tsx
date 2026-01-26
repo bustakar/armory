@@ -3,6 +3,15 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { analytics } from "@/lib/analytics";
 
+// Commitment length options with scaling XP rewards
+const COMMITMENT_OPTIONS = [
+  { days: 7, label: "1 week", xp: 1000 },
+  { days: 14, label: "2 weeks", xp: 2500 },
+  { days: 28, label: "4 weeks", xp: 10000 },
+] as const;
+
+type CommitmentDays = 7 | 14 | 28;
+
 interface Repo {
   owner: { login: string };
   name: string;
@@ -13,7 +22,7 @@ interface Repo {
 interface RepoSelectorProps {
   repos: Repo[];
   activeRepoNames: string[];
-  onActivate: (owner: string, repo: string, isPrivate: boolean) => void;
+  onActivate: (owner: string, repo: string, isPrivate: boolean, days: number) => void;
   isLoading: boolean;
   error?: string | null;
   onRetry?: () => void;
@@ -29,6 +38,7 @@ export function RepoSelector({
 }: RepoSelectorProps) {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<CommitmentDays>(7);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const filteredRepos = useMemo(
@@ -88,6 +98,25 @@ export function RepoSelector({
 
       {isOpen && (
         <div className="mt-2" id="repo-dropdown" role="listbox">
+          {/* Commitment length selector */}
+          <div className="flex gap-1 mb-3">
+            {COMMITMENT_OPTIONS.map((opt) => (
+              <button
+                key={opt.days}
+                type="button"
+                onClick={() => setSelectedDays(opt.days)}
+                className={`flex-1 px-2 py-1.5 text-xs border transition-colors ${
+                  selectedDays === opt.days
+                    ? "bg-green-800 border-green-600 text-green-200"
+                    : "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700"
+                }`}
+              >
+                <div>{opt.label}</div>
+                <div className="text-[10px] opacity-75">+{opt.xp.toLocaleString()} XP</div>
+              </button>
+            ))}
+          </div>
+
           <input
             type="text"
             value={search}
@@ -108,7 +137,7 @@ export function RepoSelector({
                   aria-selected={false}
                   onClick={() => {
                     analytics.commitmentActivated({ repo: repo.full_name, isPrivate: repo.isPrivate ?? false });
-                    onActivate(repo.owner.login, repo.name, repo.isPrivate ?? false);
+                    onActivate(repo.owner.login, repo.name, repo.isPrivate ?? false, selectedDays);
                     setIsOpen(false);
                     setSearch("");
                   }}
@@ -122,7 +151,7 @@ export function RepoSelector({
           </div>
 
           <p className="text-xs text-gray-500 mt-2">
-            30-day commitment - 0.2 HP drain/hour
+            Longer commitments = bigger XP rewards
           </p>
         </div>
       )}

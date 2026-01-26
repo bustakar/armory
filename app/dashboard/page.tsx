@@ -154,9 +154,9 @@ export default function Dashboard() {
     }
   };
 
-  const handleActivate = async (owner: string, repo: string, isPrivate: boolean) => {
+  const handleActivate = async (owner: string, repo: string, isPrivate: boolean, commitmentDays: number) => {
     try {
-      await activateCommitment({ owner, repo, isPrivate });
+      await activateCommitment({ owner, repo, isPrivate, commitmentDays });
       showSuccess(`Committed to ${owner}/${repo}`);
     } catch (error) {
       console.error("Failed to activate commitment:", error);

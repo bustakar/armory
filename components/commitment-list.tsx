@@ -4,12 +4,20 @@ import { useMemo } from "react";
 import { formatTimeRemaining } from "@/lib/utils";
 import { analytics } from "@/lib/analytics";
 
+// XP rewards by commitment length
+const COMMITMENT_XP: Record<number, number> = {
+  7: 1000,
+  14: 2500,
+  28: 10000,
+};
+
 interface Commitment {
   _id: string;
   owner: string;
   repo: string;
   activatedAt: number;
   commitmentEndsAt: number;
+  commitmentDays?: number;
   totalCommits: number;
   totalIssuesClosed: number;
   totalPrsMerged: number;
@@ -116,7 +124,7 @@ export function CommitmentList({
                     }}
                     className="flex-1 bg-green-700 hover:bg-green-600 text-white text-xs py-2 px-3 transition-colors"
                   >
-                    Renew (+25 XP)
+                    Renew (+250 XP)
                   </button>
                   <button
                     onClick={() => {
@@ -125,7 +133,7 @@ export function CommitmentList({
                     }}
                     className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs py-2 px-3 transition-colors"
                   >
-                    Complete
+                    Complete (+{(COMMITMENT_XP[commitment.commitmentDays ?? 28] ?? 1000).toLocaleString()} XP)
                   </button>
                 </>
               ) : (
