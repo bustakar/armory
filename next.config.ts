@@ -7,7 +7,7 @@ const cspDirectives = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://clerk.armory.dev https://*.posthog.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://avatars.githubusercontent.com https://img.clerk.com https://*.clerk.accounts.dev",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "connect-src 'self' https://*.convex.cloud https://*.clerk.accounts.dev https://clerk.armory.dev https://*.posthog.com wss://*.convex.cloud",
   "frame-src 'self' https://*.clerk.accounts.dev",
   "frame-ancestors 'none'",
