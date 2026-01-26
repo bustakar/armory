@@ -2,8 +2,34 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { MAX_HP } from "./game";
 
+// Shared validators
+const difficultyValidator = v.union(
+  v.literal("easy"),
+  v.literal("medium"),
+  v.literal("hard")
+);
+
+const characterValidator = v.object({
+  _id: v.id("characters"),
+  _creationTime: v.number(),
+  userId: v.id("users"),
+  name: v.string(),
+  hp: v.number(),
+  maxHp: v.number(),
+  xp: v.number(),
+  level: v.number(),
+  streak: v.number(),
+  lastActivityDate: v.optional(v.string()),
+  lastHpUpdate: v.number(),
+  isAlive: v.boolean(),
+  createdAt: v.number(),
+  difficulty: v.optional(difficultyValidator),
+});
+
 // Get current user's character
 export const get = query({
+  args: {},
+  returns: v.union(characterValidator, v.null()),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
@@ -53,8 +79,9 @@ function validateCharacterName(name: string): string {
 export const create = mutation({
   args: {
     name: v.string(),
-    difficulty: v.optional(v.union(v.literal("easy"), v.literal("medium"), v.literal("hard"))),
+    difficulty: v.optional(difficultyValidator),
   },
+  returns: v.id("characters"),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
@@ -97,11 +124,54 @@ export const create = mutation({
   },
 });
 
+// Public profile return type validator
+const publicProfileValidator = v.object({
+  user: v.object({
+    githubUsername: v.string(),
+    avatarUrl: v.optional(v.string()),
+  }),
+  character: v.union(
+    v.object({
+      name: v.string(),
+      hp: v.number(),
+      maxHp: v.number(),
+      xp: v.number(),
+      level: v.number(),
+      streak: v.number(),
+      createdAt: v.number(),
+      difficulty: v.string(),
+    }),
+    v.null()
+  ),
+  commitments: v.array(
+    v.object({
+      owner: v.union(v.string(), v.null()),
+      repo: v.union(v.string(), v.null()),
+      isPrivate: v.boolean(),
+      activatedAt: v.number(),
+      commitmentEndsAt: v.number(),
+      renewalCount: v.number(),
+    })
+  ),
+  graveyard: v.array(
+    v.object({
+      name: v.string(),
+      level: v.number(),
+      xp: v.number(),
+      diedAt: v.number(),
+      deathCause: v.string(),
+      daysLived: v.number(),
+      difficulty: v.string(),
+    })
+  ),
+});
+
 // Get public character profile by GitHub username
 export const getPublicProfile = query({
   args: {
     username: v.string(),
   },
+  returns: v.union(publicProfileValidator, v.null()),
   handler: async (ctx, args) => {
     const user = await ctx.db
       .query("users")
@@ -167,8 +237,27 @@ export const getPublicProfile = query({
   },
 });
 
+// Graveyard entry validator
+const graveyardEntryValidator = v.object({
+  _id: v.id("graveyard"),
+  _creationTime: v.number(),
+  userId: v.id("users"),
+  name: v.string(),
+  level: v.number(),
+  xp: v.number(),
+  diedAt: v.number(),
+  deathCause: v.string(),
+  daysLived: v.number(),
+  totalCommits: v.number(),
+  totalIssuesClosed: v.number(),
+  totalPrsMerged: v.number(),
+  difficulty: v.optional(difficultyValidator),
+});
+
 // Get graveyard for current user
 export const getGraveyard = query({
+  args: {},
+  returns: v.array(graveyardEntryValidator),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
@@ -199,6 +288,7 @@ export const upgradeDifficulty = mutation({
   args: {
     newDifficulty: v.union(v.literal("medium"), v.literal("hard")),
   },
+  returns: v.object({ success: v.boolean() }),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");

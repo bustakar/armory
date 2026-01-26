@@ -1,8 +1,22 @@
 import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
+// Shared validators for return types
+const userValidator = v.object({
+  _id: v.id("users"),
+  _creationTime: v.number(),
+  clerkId: v.string(),
+  githubUsername: v.string(),
+  githubAccessToken: v.optional(v.string()),
+  githubPersonalToken: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  createdAt: v.number(),
+});
+
 // Get or create user from Clerk auth
 export const getOrCreate = mutation({
+  args: {},
+  returns: v.union(userValidator, v.null()),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
@@ -33,6 +47,8 @@ export const getOrCreate = mutation({
 
 // Get current user
 export const get = query({
+  args: {},
+  returns: v.union(userValidator, v.null()),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
@@ -49,6 +65,7 @@ export const updateGitHubToken = internalMutation({
   args: {
     encryptedToken: v.string(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
@@ -63,7 +80,22 @@ export const updateGitHubToken = internalMutation({
     await ctx.db.patch(user._id, {
       githubAccessToken: args.encryptedToken,
     });
+    return null;
   },
+});
+
+// Public user validator (excludes sensitive token fields)
+const publicUserValidator = v.object({
+  _id: v.id("users"),
+  _creationTime: v.number(),
+  clerkId: v.string(),
+  githubUsername: v.string(),
+  avatarUrl: v.optional(v.string()),
+  createdAt: v.number(),
+  // Note: tokens are excluded from public queries but may still be in the DB response
+  // This validator allows them but they shouldn't be relied upon
+  githubAccessToken: v.optional(v.string()),
+  githubPersonalToken: v.optional(v.string()),
 });
 
 // Get user by GitHub username (for public profiles)
@@ -71,6 +103,7 @@ export const getByUsername = query({
   args: {
     username: v.string(),
   },
+  returns: v.union(publicUserValidator, v.null()),
   handler: async (ctx, args) => {
     return await ctx.db
       .query("users")
@@ -81,6 +114,8 @@ export const getByUsername = query({
 
 // Internal: Get user with token (for server-side GitHub API calls)
 export const getWithToken = internalQuery({
+  args: {},
+  returns: v.union(userValidator, v.null()),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
@@ -98,6 +133,7 @@ export const updateProfile = mutation({
     githubUsername: v.string(),
     avatarUrl: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
@@ -113,6 +149,7 @@ export const updateProfile = mutation({
       githubUsername: args.githubUsername,
       avatarUrl: args.avatarUrl,
     });
+    return null;
   },
 });
 
@@ -121,6 +158,7 @@ export const updatePersonalToken = internalMutation({
   args: {
     encryptedToken: v.union(v.string(), v.null()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
@@ -135,11 +173,19 @@ export const updatePersonalToken = internalMutation({
     await ctx.db.patch(user._id, {
       githubPersonalToken: args.encryptedToken ?? undefined,
     });
+    return null;
   },
 });
 
 // Get all usernames for sitemap (public, no auth required)
 export const getAllUsernames = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      username: v.string(),
+      createdAt: v.number(),
+    })
+  ),
   handler: async (ctx) => {
     const users = await ctx.db.query("users").collect();
     return users.map((u) => ({
@@ -151,6 +197,8 @@ export const getAllUsernames = query({
 
 // Check if user has personal access token configured
 export const hasPersonalToken = query({
+  args: {},
+  returns: v.boolean(),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return false;

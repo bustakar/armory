@@ -8,8 +8,32 @@ import {
   getCommitmentReward,
 } from "./game";
 
+// Commitment validator
+const commitmentValidator = v.object({
+  _id: v.id("commitments"),
+  _creationTime: v.number(),
+  userId: v.id("users"),
+  characterId: v.id("characters"),
+  owner: v.string(),
+  repo: v.string(),
+  isPrivate: v.optional(v.boolean()),
+  activatedAt: v.number(),
+  commitmentEndsAt: v.number(),
+  commitmentDays: v.optional(v.number()),
+  deactivatedAt: v.optional(v.number()),
+  wasEarlyExit: v.optional(v.boolean()),
+  renewalCount: v.number(),
+  totalCommits: v.number(),
+  totalIssuesClosed: v.number(),
+  totalPrsMerged: v.number(),
+  xpEarned: v.number(),
+  lastScannedAt: v.optional(v.number()),
+});
+
 // Get active commitments for current user
 export const getActive = query({
+  args: {},
+  returns: v.array(commitmentValidator),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
@@ -33,6 +57,8 @@ export const getActive = query({
 
 // Get all commitments for current user (including history)
 export const getAll = query({
+  args: {},
+  returns: v.array(commitmentValidator),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
@@ -59,6 +85,7 @@ export const activate = mutation({
     isPrivate: v.optional(v.boolean()),
     commitmentDays: v.optional(v.number()), // 7, 14, or 28 (defaults to 7)
   },
+  returns: v.id("commitments"),
   handler: async (ctx, args) => {
     const days = args.commitmentDays ?? 7;
     if (![7, 14, 28].includes(days)) {
@@ -125,6 +152,7 @@ export const deactivate = mutation({
   args: {
     commitmentId: v.id("commitments"),
   },
+  returns: v.object({ isEarlyExit: v.boolean() }),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
@@ -190,6 +218,7 @@ export const renew = mutation({
   args: {
     commitmentId: v.id("commitments"),
   },
+  returns: v.id("commitments"),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
