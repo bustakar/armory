@@ -2,8 +2,31 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 
+// Leaderboard entry validators
+const topPlayerValidator = v.object({
+  rank: v.number(),
+  characterName: v.string(),
+  level: v.number(),
+  xp: v.number(),
+  githubUsername: v.string(),
+  avatarUrl: v.optional(v.string()),
+});
+
+const leaderboardEntryValidator = v.object({
+  rank: v.number(),
+  characterName: v.string(),
+  level: v.number(),
+  xp: v.number(),
+  streak: v.number(),
+  difficulty: v.string(),
+  githubUsername: v.string(),
+  avatarUrl: v.optional(v.string()),
+});
+
 // Get top 10 players for homepage preview
 export const getTopPlayers = query({
+  args: {},
+  returns: v.array(topPlayerValidator),
   handler: async (ctx) => {
     // Get all living characters sorted by XP (descending)
     const characters = await ctx.db
@@ -42,6 +65,7 @@ export const getLeaderboard = query({
     filter: v.union(v.literal("all"), v.literal("month"), v.literal("week")),
     limit: v.optional(v.number()),
   },
+  returns: v.array(leaderboardEntryValidator),
   handler: async (ctx, args) => {
     const limit = args.limit || 100;
     const now = Date.now();
