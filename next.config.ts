@@ -4,12 +4,12 @@ import type { NextConfig } from "next";
 // Allows: self, Clerk auth, Convex backend, PostHog analytics, GitHub avatars
 const cspDirectives = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://clerk.armory.dev https://*.posthog.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.armory.rip https://clerk.armory.rip https://*.posthog.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://avatars.githubusercontent.com https://img.clerk.com https://*.clerk.accounts.dev",
+  "img-src 'self' data: blob: https://avatars.githubusercontent.com https://img.clerk.com https://*.clerk.accounts.dev https://*.clerk.armory.rip",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://*.convex.cloud https://*.clerk.accounts.dev https://clerk.armory.dev https://*.posthog.com wss://*.convex.cloud",
-  "frame-src 'self' https://*.clerk.accounts.dev",
+  "connect-src 'self' https://*.convex.cloud https://*.clerk.accounts.dev https://*.clerk.armory.rip https://clerk.armory.rip https://*.posthog.com wss://*.convex.cloud",
+  "frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.armory.rip https://clerk.armory.rip",
   "frame-ancestors 'none'",
   "form-action 'self'",
   "base-uri 'self'",
